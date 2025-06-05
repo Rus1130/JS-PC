@@ -1,15 +1,44 @@
 <style>
+    body {
+        background-color: black;
+    }
+    #screen {
+        border: black solid 1px;
+        width: 640px;
+        height: 480px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
 
+    .cell {
+        width: 8px;
+        height: 8px;
+        display: inline-block;
+        background-color: white;
+        color: black;
+
+    }
 </style>
 <body>
-
+ <div id="screen"></div>
 </body>
 <script src="./index.js"></script>
 <script>
-    PC.powerOn()
-    setInterval(() => {
-        console.log(PC.mem)
-    }, 100)
+    const screen = document.getElementById('screen');
+    const columns = screen.clientWidth / 8;
+    const rows = screen.clientHeight / 8;
 
-    setTimeout(() => PC.powerOff(), 1000)
+    for(let i = 0; i < columns * rows; i++) {
+        const cell = document.createElement('div');
+        cell.id = 'cell-'+i;
+        cell.className = 'cell';
+        screen.appendChild(cell);
+    }
+    console.log(columns*rows)
+    // PC.powerOn()
+    // setInterval(() => {
+    //     console.log(PC.mem)
+    // }, 100)
 </script>
