@@ -36,9 +36,12 @@
         cell.className = 'cell';
         screen.appendChild(cell);
     }
-    console.log(columns*rows)
-    // PC.powerOn()
-    // setInterval(() => {
-    //     console.log(PC.mem)
-    // }, 100)
+    PC.logging = true;
+    PC.powerOn();
+
+    let colorVisualized = colors.visualize((data) => {
+        return data.map(v => v.toString(16).toUpperCase().padStart(2, '0')).join("").match(/.{1,6}/g).map(v => "#"+v);
+    })
+
+    console.log(colorVisualized)
 </script>
