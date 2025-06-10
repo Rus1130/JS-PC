@@ -1,0 +1,40 @@
+fibonacci
+    4, OPCODE.store, 1, 0,
+    4, OPCODE.store, 2, 1,
+    4, OPCODE.store, 3, 0,
+    5, OPCODE.add, 1, 2, 3,
+    3, OPCODE.print, 2,
+    4, OPCODE.set, 2, 1,
+    4, OPCODE.set, 3, 2,
+    3, OPCODE.jump, 3
+
+Hello, World!
+    4, OPCODE.store, 0, 34, // H
+    4, OPCODE.store, 1, 5, // e
+    4, OPCODE.store, 2, 12, // l
+    4, OPCODE.store, 3, 15, // o
+    4, OPCODE.store, 4, 0, // space
+    4, OPCODE.store, 5, 65, // ,
+    4, OPCODE.store, 6, 49, // W
+    4, OPCODE.store, 7, 18, // r
+    4, OPCODE.store, 8, 4, // d
+    4, OPCODE.store, 9, 63, // !
+    15, OPCODE.print_c, 0, 1, 2, 2, 3, 5, 4, 6, 3, 7, 2, 8, 9
+
+Simulated function:
+    4, OPCODE.store, 3, 153,
+    4, OPCODE.store, 0, 100,
+    4, OPCODE.store, 1, 0,
+    3, OPCODE.goto, 6,
+    // simulated function start
+    5, OPCODE.add, 0, 1, 1,
+    3, OPCODE.print, 1,
+    // simulated function end
+    2, OPCODE.return,
+    3, OPCODE.jump, 4, // function call
+    3, OPCODE.jump, 4,
+    3, OPCODE.print, 3,
+    3, OPCODE.jump, 4,
+    3, OPCODE.jump, 4,
+    3, OPCODE.jump, 4,
+    3, OPCODE.jump, 4,
