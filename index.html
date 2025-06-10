@@ -1,4 +1,7 @@
 <style>
+    * {
+        font-family: 'Press Start 2P';
+    }
     body {
         background-color: black;
     }
@@ -10,38 +13,87 @@
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
+        font-size: 0;
     }
 
     .cell {
         width: 8px;
         height: 8px;
-        display: inline-block;
         background-color: white;
         color: black;
+        float: left;
+        font-size: 8px;
+        line-height: 8px;
+    }
 
+    #counter {
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        color: white;
+        font-size: 12px;
     }
 </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <body>
- <div id="screen"></div>
+    <div id="counter">0 ticks fired, 0 lost (0.00%)</div>
+    <div id="screen"></div>
 </body>
 <script src="./index.js"></script>
 <script>
+    function haltTab(ms) {
+        const start = performance.now();
+        while (performance.now() - start < ms) {}
+    }
+
+    let ticksFired = 0;
+    let lostTicks = 0;
+    let startTime = performance.now();
+    let lastTime = startTime;
+
+    setInterval(() => {
+        const now = performance.now();
+        const elapsed = now - lastTime;
+        lastTime = now;
+
+        ticksFired++;
+
+        if (elapsed > PC.options.msPerCycle * 1.5) {
+            const expectedTicks = Math.floor(elapsed / PC.options.msPerCycle);
+            const missed = expectedTicks - 1;
+            lostTicks += missed;
+        }
+
+        const totalExpectedTicks = Math.floor((now - startTime) / PC.options.msPerCycle);
+        const percentMissed = (lostTicks / totalExpectedTicks) * 100;
+
+        const counter = document.getElementById('counter');
+        counter.innerText = `${ticksFired} ticks fired, ${lostTicks} lost (${percentMissed.toFixed(2)}%)`;
+    }, PC.options.msPerCycle);
+
     const screen = document.getElementById('screen');
     const columns = screen.clientWidth / 8;
     const rows = screen.clientHeight / 8;
 
     for(let i = 0; i < columns * rows; i++) {
-        const cell = document.createElement('div');
-        cell.id = 'cell-'+i;
+        const x = i % columns;
+        const y = Math.floor(i / columns);
+        const cell = document.createElement('span');
+        cell.id = `cell-${x}-${y}`;
         cell.className = 'cell';
         screen.appendChild(cell);
     }
-    PC.logging = true;
+
+    function clearScreen() {
+        const cells = document.querySelectorAll('.cell');
+        cells.forEach(cell => {
+            cell.style.backgroundColor = 'white';
+            cell.style.color = 'white';
+            cell.innerText = '';
+        });
+    }
+
     PC.powerOn();
-
-    let colorVisualized = colors.visualize((data) => {
-        return data.map(v => v.toString(16).toUpperCase().padStart(2, '0')).join("").match(/.{1,6}/g).map(v => "#"+v);
-    })
-
-    console.log(colorVisualized)
 </script>
