@@ -163,6 +163,9 @@ class PC {
     static powerOn(){
         // get everything from the startup block and put it into the instruction register
         PC.log("Power on", ['INFO']);
+
+        instruction_register.setBlockData([...startup_register.data]);
+
         PC.Clock = setInterval(() => {
             if(PC.options.logCycle) PC.log(PC.cycles, ['CYCLE']);
             // Memory overlap check
@@ -190,6 +193,8 @@ class PC {
     }
 
     static powerOff(){
+            ram.setBlockData(new Array(ram.size).fill(undefined));
+            instruction_register.setBlockData(new Array(instruction_register.size).fill(undefined));
         clearInterval(PC.Clock);
         PC.Clock = null;
         clearScreen()
@@ -228,7 +233,7 @@ class PC {
                     PC.halt(`Address out of bounds for ram_store: ${address}`, ['MACHINE CODE']);
                     return;
                 }
-                if (typeof value !== 'number' || value < 0 || value > 0xff) {
+                if (typeof value !== 'number' || value < 0 || value > 0xffff) {
                     PC.halt(`Invalid value for ram_store: ${value}`, ['MACHINE CODE']);
                     return;
                 }
@@ -241,7 +246,7 @@ class PC {
                 let value = args[0];
 
                 if (ram.data[value] === undefined) {
-                    PC.log(`Address ${value} in RAM does not exist for print_c`, ['MACHINE CODE', 'WARN']);
+                    PC.halt(`Address ${value} in RAM does not exist for print_c`, ['MACHINE CODE']);
                     return;
                 }
 
@@ -265,7 +270,7 @@ class PC {
                 }
 
                 if (ram.data[value] === undefined) {
-                    PC.log(`Address ${value} in RAM does not exist for print`, ['MACHINE CODE', 'WARN']);
+                    PC.halt(`Address ${value} in RAM does not exist for print`, ['MACHINE CODE']);
                     return;
                 }
 
@@ -441,6 +446,13 @@ class PC {
                     PC.halt(`Result of division is out of bounds: ${divResult}`, ['MACHINE CODE']);
                     return;
                 }
+
+                if (outputAddress < 0 || outputAddress >= ram.data.length) {
+                    PC.halt(`Output address out of bounds for divide: ${outputAddress}`, ['MACHINE CODE']);
+                    return;
+                }
+                ram.setByte(outputAddress, divResult);
+                PC.log(`Divided values at addresses ${address1} and ${address2}, stored result ${divResult} at address ${outputAddress}`, ['MACHINE CODE', 'SUCCESS']);
             } break;
         }
     }
@@ -461,12 +473,12 @@ let colorBlock = new Block("colors", 0, 47); // 16*3 = 48
 let characterBlock = new Block("character_map", 48, 303); // 255
 let ram = new Block("RAM", 304, 2854);
 let instruction_register = new Block("instruction_register", 2855, 3855);
-instruction_register.setBlockData([
-    4, OPCODE.ram_store, 0, 1,
-    4, OPCODE.ram_store, 1, 2,
-    5, OPCODE.add, 0, 1, 2,
-    3, OPCODE.print, 2,
-]);
+let startup_register = new Block("startup_register", 3856, 4255);
+
+// startup_register.setBlockData([
+//     4, OPCODE.ram_store, 0, 1000,
+//     3, OPCODE.print, 0,
+// ]);
 
 colorBlock.setBlockData([
     0x0,  0x0,  0x0,  // #000000
