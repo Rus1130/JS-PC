@@ -33,16 +33,58 @@
         color: white;
         font-size: 12px;
     }
+
+    #wrapper {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 396px;
+    }
 </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <body>
     <div id="counter">0 ticks fired, 0 lost (0.00%)</div>
+    <div id="wrapper" style="display: none;">
+        <canvas id="ticks"></canvas>
+        <canvas id="instructions"></canvas>
+    </div>
     <div id="screen"></div>
 </body>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="./index.js"></script>
 <script>
+    function getConfig(label){
+        return {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: label,
+                    data: [],
+                    fill: false,
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0
+                }]
+            },
+        }
+    }
+
+    let tickChart = new Chart(document.getElementById('ticks').getContext('2d'), getConfig('% Lost Ticks'));
+
+    let instructionChart = new Chart(document.getElementById('instructions').getContext('2d'), getConfig('Instructions Executed per Second'));
+
+    function addData(chart, label, value) {
+        chart.data.labels.push(label);            // Add new label
+        chart.data.datasets[0].data.push(value);  // Add new data value
+                chart.update();                           // Re-render chart
+        if (chart.data.labels.length > 9) {     // Limit to 100 data points
+            chart.data.labels.shift();             // Remove the oldest label
+            chart.data.datasets[0].data.shift();   // Remove the oldest data value
+        }
+    }
+
     function haltTab(ms) {
         const start = performance.now();
         while (performance.now() - start < ms) {}
@@ -52,6 +94,41 @@
     let lostTicks = 0;
     let startTime = performance.now();
     let lastTime = startTime;
+
+    let lastInstructionCount = 0;
+
+    function recordDiagnostics() {
+        const currentInstructionCount = PC.diagnostics.instructionsProcessed;
+        const instructionsPerSecond = currentInstructionCount - lastInstructionCount;
+
+        const elapsedSeconds = ((performance.now() - startTime) / 1000).toFixed(2);
+
+        const now = performance.now();
+
+        const totalExpectedTicks = Math.floor((now - startTime) / PC.options.msPerCycle);
+        const percentMissed = (lostTicks / totalExpectedTicks) * 100;
+
+        addData(tickChart, ticksFired, percentMissed.toFixed(2));
+        addData(instructionChart, elapsedSeconds+'s', instructionsPerSecond);
+
+        lastInstructionCount = currentInstructionCount;
+    }
+
+    document.body.addEventListener('keydown', (e) => {
+        if(e.key === "F2"){
+            e.preventDefault();
+            // toggle the display of the diagnostics wrapper
+            const wrapper = document.getElementById('wrapper');
+            if (wrapper.style.display === 'none') {
+                wrapper.style.display = 'block';
+            } else {
+                wrapper.style.display = 'none';
+            }
+        }
+    });
+
+    setInterval(recordDiagnostics, 1000)
+    recordDiagnostics();
 
     setInterval(() => {
         const now = performance.now();
@@ -95,5 +172,9 @@
         });
     }
 
-    PC.powerOn();
+    //PC.powerOn();
+    const fileName = 'DESIRE';
+    const fileBody = `Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`;
+    let file = PC.createFile(fileName, fileBody, "txt")
+    console.log(file);
 </script>

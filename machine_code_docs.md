@@ -96,10 +96,28 @@ jumps to a specific instruction in the instruction register, does not have `retu
 3, OPCODE.goto, [index]
 ```
 
+## goto_if_zero
+jumps to a specific instruction if the value at the address is zero, does not have `return` functionality
+```
+4, OPCODE.goto_if_zero, [address], [index]
+```
+
+## goto_if_not_zero
+jumps to a specific instruction if the value at the address is not zero, does not have `return` functionality
+```
+4, OPCODE.goto_if_not_zero, [address], [index]
+```
+
 ## nop
 does nothing
 ```
 2, OPCODE.nop
+```
+
+## clear
+clears the instruction register
+```
+2, OPCODE.clear
 ```
 
 

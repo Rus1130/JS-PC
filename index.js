@@ -99,7 +99,6 @@ class PC {
     static mem = new Array(0xffff).fill(null);
     static Clock = null;
     static instructionPointer = 0;
-    static instructionAddresses = []
 
     static halt(message, prefixes = []){
         PC.log(message, prefixes.concat(['ERROR']));
@@ -111,7 +110,11 @@ class PC {
         logCycle: false,
         simpleLog: false,
         logFilter: ["PROGRAM LOG", "ERROR", "WARN"],
-        msPerCycle: 5 // 20,
+        msPerCycle: 20 // 20,
+    }
+
+    static diagnostics = {
+        instructionsProcessed: 0,
     }
 
     static log(message, prefixes = []) {
@@ -127,6 +130,8 @@ class PC {
             FOUND: 'color: #9b59b6; font-weight: bold;',
             "MACHINE CODE": 'color: #C40000; font-weight: bold;',
             "MACHINE STATE": 'color: #0000C4; font-weight: bold;',
+            "ASSEMBLY": 'color: #C4C400; font-weight: bold;',
+            "FILESYSTEM": 'color: #C4C4C4; font-weight: bold;',
         };
 
         let formatString = '';
@@ -191,33 +196,66 @@ class PC {
     static cycles = 0;
     static didJump = false;
 
-    static #runMachineCode(register){
-        let instructionStart = PC.instructionPointer;
-        let instructionLength = register.data[instructionStart];
+    static compileToMachineCode(assemblyString){
+        let lines = assemblyString.trim().split(/\n/).map(line => line.trim()).filter(line => line.length > 0);
 
-        if(instructionLength == undefined) {
-            PC.log("No instructions to execute", ['LOG']);
-            instruction_register.setBlockData(new Array(instruction_register.size).fill(undefined));
-            PC.instructionPointer = 0;
-            return;
+        PC.log(`Compiling assembly code to machine code`, ['ASSEMBLY']);
+
+        let result = [];
+        for(let line of lines){
+            let parts = line.split(' ');
+            parts[0] = ASSEMBLY_MAP[parts[0].toLowerCase()];
+
+            if(parts[0] == undefined){
+                PC.log(`Invalid instruction: ${line}`, ['ASSEMBLY', 'ERROR']);
+                return [2, OPCODE.clear]
+            }
+
+            parts.forEach((part, index) => {
+                if(typeof part !== 'number' && !isNaN(part)){
+                    parts[index] = parseInt(part, 10);
+                }
+            });
+
+            result.push(parts.length + 1)
+            result.push(...parts)
         }
 
+        return result
+    }
+
+    static #runMachineCode(register){
+        let instructionStart = PC.instructionPointer;
+
+        let instructionLength = register.data[instructionStart];
+
+        if(instructionLength == undefined){
+            PC.log("No instructions to execute", ['LOG']);
+            return;
+        }
+        
         PC.log(`Executing instruction at address ${instructionStart} in register ${register.name}`, ['FOUND']);
 
         let instruction = register.data.slice(instructionStart, instructionStart + instructionLength);
-        if (instruction.length !== instructionLength) {
-            PC.halt(`Instruction length mismatch: expected ${instructionLength}, got ${instruction.length}`, ['MACHINE CODE']);
-            return;
-        }
-        PC.instruct(instruction);
-        let size = instruction_register.data[PC.instructionPointer];
-
-        // Only advance if jump did not occur
-        if (!PC.didJump) {
-            PC.instructionPointer += size;
+        if(instruction == undefined && instruction.length == 0){
+            PC.log("No instructions to execute", ['LOG']);
         } else {
-            PC.didJump = false;
+            if (instruction.length !== instructionLength) {
+                PC.halt(`Instruction length mismatch: expected ${instructionLength}, got ${instruction.length}`, ['MACHINE CODE']);
+                return;
+            }
+            PC.instruct(instruction);
+            PC.diagnostics.instructionsProcessed++;
+            let size = instruction_register.data[PC.instructionPointer];
+
+            if (!PC.didJump) {
+                if(size != undefined) PC.instructionPointer += size;
+            } else {
+                PC.didJump = false;
+            }
         }
+
+
     }
 
     static resetVolatileMemory() {
@@ -228,15 +266,47 @@ class PC {
         PC.cycles = 0;
         PC.didJump = false;
         clearInterval(PC.Clock);
+        PC.diagnostics.instructionsProcessed = 0;
         PC.Clock = null;
         PC.clearScreen();
+    }
+
+    static createFile(name, body, type){
+        if(name.match(/[a-zA-Z0-9_]+/) === null){
+            PC.halt(`Invalid file name: ${name}. Only alphanumeric characters and underscores are allowed.`, ['FILESYSTEM']);
+            return;
+        }
+        if(body.length > 0x7FFF - filesystem.start){
+            PC.halt(`File body exceeds maximum size of ${0x7FFF - filesystem.start} bytes`, ['FILESYSTEM']);
+            return;
+        }
+        if(["␀", "␂", "␃", "␄", "␜", "␟"].includes(name)){
+            PC.halt(`Invalid characters in file name: ${name}`, ['FILESYSTEM']);
+            return;
+        }
+        if(["␀", "␂", "␃", "␄", "␜", "␟"].some(char => body.includes(char))){
+            PC.halt(`Invalid characters in file body`, ['FILESYSTEM']);
+            return;
+        }
+        const typeMap = {
+            "txt": 0,
+            "a": 1,
+        }
+
+        let fileType = typeMap[type] ?? 0;
+
+        let file = ["␜",  fileType.toString(), "␟", ...name, "␟", ...body, "␜"];
+
+        file = file.map(x => charactersToCode(x)[0]);
+
+        return file;
     }
 
     static powerOn(){
         // get everything from the startup block and put it into the instruction register
         PC.log("Power on", ['MACHINE STATE']);
 
-        instruction_register.setBlockData(startup_register.data);
+        instruction_register.setBlockData([...startup_register.data]);
 
         PC.Clock = setInterval(() => {
             if(PC.options.logCycle) PC.log(PC.cycles, ['CYCLE']);
@@ -623,11 +693,7 @@ class PC {
                 }
 
                 // calculate the indexes of the instruction register
-                let indexes = [];
-                for (let i = 0; i < instruction_register.data.length; i++) {
-                    indexes.push(i);
-                    i += instruction_register.data[i] - 1;
-                }
+                let indexes = PC.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
@@ -650,11 +716,7 @@ class PC {
                     return;
                 }
                 // calculate the indexes of the instruction register
-                let indexes = [];
-                for (let i = 0; i < instruction_register.data.length; i++) {
-                    indexes.push(i);
-                    i += instruction_register.data[i] - 1;
-                }
+                let indexes = PC.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
@@ -715,11 +777,7 @@ class PC {
                 }
 
                 // calculate the indexes of the instruction register
-                let indexes = [];
-                for (let i = 0; i < instruction_register.data.length; i++) {
-                    indexes.push(i);
-                    i += instruction_register.data[i] - 1;
-                }
+                let indexes = PC.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
@@ -727,10 +785,62 @@ class PC {
                 }
 
                 PC.instructionPointer = indexes[args[0]];
-                PC.log(`Wentto instruction at instruction index ${indexes[args[0]]}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Goto instruction at instruction index ${indexes[args[0]]}`, ['MACHINE CODE', 'SUCCESS']);
+            } break;
+
+            case "goto_if_zero": {
+                if (args.length !== 2) {
+                    PC.halt(`Invalid number of arguments for goto_if_zero: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    return;
+                }
+                // calculate the indexes of the instruction register
+                let indexes = PC.getInstructionIndexes();
+
+                if (args[0] < 0 || args[0] >= indexes.length) {
+                    PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    return;
+                }
+
+                if (ram.data[args[0]] === undefined) {
+                    PC.halt(`Address ${args[0]} in RAM does not exist for goto_if_zero`, ['MACHINE CODE']);
+                    return;
+                }
+                if (ram.data[args[0]] === 0) {
+                    PC.instructionPointer = indexes[args[1]];
+                    PC.log(`Goto instruction at instruction index ${indexes[args[1]]} because value is zero`, ['MACHINE CODE', 'SUCCESS']);
+                } else {
+                    PC.log(`Did not goto instruction at index ${indexes[args[1]]} because value is not zero`, ['MACHINE CODE', 'INFO']);
+                }
+            } break;
+
+            case "goto_if_not_zero": {
+                if (args.length !== 2) {
+                    PC.halt(`Invalid number of arguments for goto_if_not_zero: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    return;
+                }
+                // calculate the indexes of the instruction register
+                let indexes = PC.getInstructionIndexes();
+                if (args[0] < 0 || args[0] >= indexes.length) {
+                    PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    return;
+                }
+                if (ram.data[args[0]] === undefined) {
+                    PC.halt(`Address ${args[0]} in RAM does not exist for goto_if_not_zero`, ['MACHINE CODE']);
+                    return;
+                }
+                if (ram.data[args[0]] !== 0) {
+                    PC.instructionPointer = indexes[args[1]];
+                    PC.log(`Goto instruction at instruction index ${indexes[args[1]]} because value is not zero`, ['MACHINE CODE', 'SUCCESS']);
+                } else {
+                    PC.log(`Did not goto instruction at index ${indexes[args[1]]} because value is zero`, ['MACHINE CODE', 'INFO']);
+                }
             } break;
 
             case "nop": {} break;
+
+            case "clear": {
+                instruction_register.setBlockData(new Array(instruction_register.size).fill(undefined));
+            } break;
 
             default: {
                 PC.halt(`Instruction opcode: ${opCode}, name: ${instructionName}, is not defined`, ['MACHINE CODE']);
@@ -755,8 +865,34 @@ const OPCODE = {
     jump_if_not_zero: 11,
     return: 12,
     goto: 13,
-    set_pixel: 14,
-    nop: 15
+    goto_if_zero: 14,
+    goto_if_not_zero: 15,
+    set_pixel: 16,
+    nop: 17,
+    clear: 18,
+}
+
+const ASSEMBLY_MAP = {
+    // assembly mappings
+    halt: OPCODE.halt,
+    store: OPCODE.store,
+    set: OPCODE.set,
+    print: OPCODE.print,
+    printc: OPCODE.print_c,
+    add: OPCODE.add,
+    sub: OPCODE.subtract,
+    mul: OPCODE.multiply,
+    div: OPCODE.divide,
+    jmp: OPCODE.jump,
+    jmpfz: OPCODE.jump_if_zero,
+    jmpnz: OPCODE.jump_if_not_zero,
+    ret: OPCODE.return,
+    goto: OPCODE.goto,
+    gotofz: OPCODE.goto_if_zero,
+    gotonz: OPCODE.goto_if_not_zero,
+    spix: OPCODE.set_pixel,
+    nop: OPCODE.nop,
+    clear: OPCODE.clear,
 }
 
 
@@ -768,6 +904,7 @@ let ram = new Block("RAM", 304, 2854);
 let instruction_register = new Block("instruction_register", 2855, 5855);
 let startup_register = new Block("startup", 5856, 6856);
 let jump_return_register = new Block("jump_return_register", 6857, 6857);
+let filesystem = new Block("filesystem", 6858, 0x7FFF); // 0xFFFF - 0x1A00 = 0xE000
 
 colorBlock.setBlockData([
     0x0,  0x0,  0x0,  // #000000
@@ -882,6 +1019,13 @@ characterBlock.setBlockData([
     0x0, 0x25, // %     , 90
     0x0, 0x5E, // ^     , 91
     0x0, 0x26, // &     , 92
+    0x24, 0x00, // ␀     , 93 : null
+    0x24, 0x02, // ␂     , 94 : start of text
+    0x24, 0x03, // ␃     , 95 : end of text
+    0x24, 0x04, // ␄     , 96 : end of transmission
+    0x24, 0x1C, // ␜     , 97 : file separator
+    0x24, 0x1F, // ␟     , 98 : unit separator
+    0x00, 0x0A  // \n     , 99 : line feed
 ]);
 
 const characterBlockVisualized = () => characterBlock.visualize((data) => {
@@ -892,6 +1036,12 @@ const characterBlockVisualized = () => characterBlock.visualize((data) => {
 
 const colorBlockVisualized = () => colorBlock.visualize((data) => {
     return data.map(v => v.toString(16).toUpperCase().padStart(2, '0')).join("").match(/.{1,6}/g).map(v => "#"+v);
+})
+
+const getFileSystem = () => filesystem.visualize((data) => {
+    return data.map(v => v.toString(16).padStart(2, '0').toUpperCase()).join("").match(/.{1,4}/g).map(v => {
+        return String.fromCharCode(parseInt(v, 16))
+    }).join("");
 })
 
 const charactersToCode = (str) => {
@@ -912,17 +1062,24 @@ const codeToCharacters = (arr) => {
     return arr.map(index => characterBlockVisualized()[index]).join("");
 }
 
-startup_register.setBlockData([
-    4, OPCODE.store, 0, 80, // x
-    4, OPCODE.store, 1, 1, // 1
-    4, OPCODE.store, 2, 0, // y
-    4, OPCODE.store, 3, 1, // back color
-    4, OPCODE.store, 4, 15, // fore color
-    4, OPCODE.store, 5, 0, // character
-    5, OPCODE.subtract, 0, 1, 0,
-    7, OPCODE.set_pixel, 0, 2, 3, 4, 5, // set pixel at (x, y) with back color, fore color and character
-    4, OPCODE.jump_if_not_zero, 0, 5,
-]);
+// startup_register.setBlockData([
+//     4, OPCODE.store, 3, 153,
+//     4, OPCODE.store, 0, 100,
+//     4, OPCODE.store, 1, 0,
+//     3, OPCODE.goto, 6,
+//     // simulated function start
+//     5, OPCODE.add, 0, 1, 1,
+//     3, OPCODE.print, 1,
+//     // simulated function end
+//     2, OPCODE.return,
+//     3, OPCODE.jump, 4, // function call
+//     3, OPCODE.jump, 4,
+//     3, OPCODE.print, 3,
+//     3, OPCODE.jump, 4,
+//     3, OPCODE.jump, 4,
+//     3, OPCODE.jump, 4,
+//     3, OPCODE.jump, 4,
+// ]);
 
 /*
 add PROCEDURES
