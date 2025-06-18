@@ -94,265 +94,62 @@ class Block {
     }
 }
 
-class PC {
-    static blocks = {};
-    static mem = new Array(0xffff).fill(null);
-    static Clock = null;
-    static instructionPointer = 0;
-
-    static halt(message, prefixes = []){
-        PC.log(message, prefixes.concat(['ERROR']));
-        PC.powerOff();
+class ThreadContext {
+    constructor(name, register) {
+        this.name = name;
+        this.register = register;
+        this.pointer = 0;
+        this.active = true;
+        this.didJump = false;
     }
 
-    static options = {
-        logging: true,
-        logCycle: false,
-        simpleLog: false,
-        logFilter: ["PROGRAM LOG", "ERROR", "WARN"],
-        msPerCycle: 20 // 20,
-    }
-
-    static diagnostics = {
-        instructionsProcessed: 0,
-    }
-
-    static log(message, prefixes = []) {
-        if(!PC.options.logging) return;
-        const styles = {
-            INFO: 'color: #0af; font-weight: bold;',
-            SUCCESS: 'color: #0c0; font-weight: bold;',
-            ERROR: 'color: #f33; font-weight: bold;',
-            WARN: 'color: orange; font-weight: bold;',
-            LOG: 'color: gray; font-weight: bold;',
-            "PROGRAM LOG": 'color: #00c4c4; font-weight: bold;', // #F34EF3
-            CYCLE: 'color: #F3F34E; font-weight: bold;',
-            FOUND: 'color: #9b59b6; font-weight: bold;',
-            "MACHINE CODE": 'color: #C40000; font-weight: bold;',
-            "MACHINE STATE": 'color: #0000C4; font-weight: bold;',
-            "ASSEMBLY": 'color: #C4C400; font-weight: bold;',
-            "FILESYSTEM": 'color: #C4C4C4; font-weight: bold;',
-        };
-
-        let formatString = '';
-        let styleArray = [];
-
-        for (let prefix of prefixes) {
-            formatString += `%c[${prefix}] `;
-            styleArray.push(styles[prefix] || styles.LOG);
-        }
-
-        formatString += '%c' + message;
-        styleArray.push('color: inherit;');
-
-        function out(){
-            if(prefixes.includes("ERROR")) console.error(formatString, ...styleArray)
-            else if(prefixes.includes("WARN")) console.warn(formatString, ...styleArray);
-            else console.log(formatString, ...styleArray);
-        }
-
-        if (PC.options.simpleLog) {
-            if (PC.options.logFilter.length > 0 && !prefixes.some(prefix => PC.options.logFilter.includes(prefix))) {
-                return;
-            } else {
-                out();
-            }
-        } else {
-            out();
-        }
-
-        
-    
-    }
-
-    static output(message, prefixes = {}) {
-        console.log('%c[OUTPUT]%c ' + message, 'color: #0c0; font-weight: bold;', 'color: inherit;');
-    }
-
-    static clearScreen() {
-        const screen = document.getElementById('screen');
-        const columns = screen.clientWidth / 8;
-        const rows = screen.clientHeight / 8;
-
-        for(let i = 0; i < columns * rows; i++) {
-            const x = i % columns;
-            const y = Math.floor(i / columns);
-            const cell = document.getElementById(`cell-${x}-${y}`);
-            cell.style.backgroundColor = '#FFFFFF';
-            cell.style.color = '#000000';
-            cell.textContent = '';
-        }
-    }
-
-    static mapOpcode(opcode) {
-        if (typeof opcode === 'string') {
-            return Object.keys(OPCODE).find(key => OPCODE[key] === opcode) || -1;
-        } else if (typeof opcode === 'number') {
-            return Object.entries(OPCODE).find(([key, value]) => value === opcode)?.[0] || -1;
-        }
-        return null;
-    }
-
-    static cycles = 0;
-    static didJump = false;
-
-    static compileToMachineCode(assemblyString){
-        let lines = assemblyString.trim().split(/\n/).map(line => line.trim()).filter(line => line.length > 0);
-
-        PC.log(`Compiling assembly code to machine code`, ['ASSEMBLY']);
-
-        let result = [];
-        for(let line of lines){
-            let parts = line.split(' ');
-            parts[0] = ASSEMBLY_MAP[parts[0].toLowerCase()];
-
-            if(parts[0] == undefined){
-                PC.log(`Invalid instruction: ${line}`, ['ASSEMBLY', 'ERROR']);
-                return [2, OPCODE.clear]
-            }
-
-            parts.forEach((part, index) => {
-                if(typeof part !== 'number' && !isNaN(part)){
-                    parts[index] = parseInt(part, 10);
-                }
-            });
-
-            result.push(parts.length + 1)
-            result.push(...parts)
-        }
-
-        return result
-    }
-
-    static #runMachineCode(register){
-        let instructionStart = PC.instructionPointer;
-
-        let instructionLength = register.data[instructionStart];
-
-        if(instructionLength == undefined){
-            PC.log("No instructions to execute", ['LOG']);
-            return;
-        }
-        
-        PC.log(`Executing instruction at address ${instructionStart} in register ${register.name}`, ['FOUND']);
-
-        let instruction = register.data.slice(instructionStart, instructionStart + instructionLength);
-        if(instruction == undefined && instruction.length == 0){
-            PC.log("No instructions to execute", ['LOG']);
-        } else {
-            if (instruction.length !== instructionLength) {
-                PC.halt(`Instruction length mismatch: expected ${instructionLength}, got ${instruction.length}`, ['MACHINE CODE']);
-                return;
-            }
-            PC.instruct(instruction);
-            PC.diagnostics.instructionsProcessed++;
-            let size = instruction_register.data[PC.instructionPointer];
-
-            if (!PC.didJump) {
-                if(size != undefined) PC.instructionPointer += size;
-            } else {
-                PC.didJump = false;
-            }
-        }
-
-
-    }
-
-    static resetVolatileMemory() {
-        ram.setBlockData(new Array(ram.size).fill(undefined));
-        instruction_register.setBlockData(new Array(instruction_register.size).fill(undefined));
-        jump_return_register.setBlockData(new Array(jump_return_register.size).fill(undefined));
-        PC.instructionPointer = 0;
-        PC.cycles = 0;
-        PC.didJump = false;
-        clearInterval(PC.Clock);
-        PC.diagnostics.instructionsProcessed = 0;
-        PC.Clock = null;
-        PC.clearScreen();
-    }
-
-    static createFile(name, body, type){
-        if(name.match(/[a-zA-Z0-9_]+/) === null){
-            PC.halt(`Invalid file name: ${name}. Only alphanumeric characters and underscores are allowed.`, ['FILESYSTEM']);
-            return;
-        }
-        if(body.length > 0x7FFF - filesystem.start){
-            PC.halt(`File body exceeds maximum size of ${0x7FFF - filesystem.start} bytes`, ['FILESYSTEM']);
-            return;
-        }
-        if(["␀", "␂", "␃", "␄", "␜", "␟"].includes(name)){
-            PC.halt(`Invalid characters in file name: ${name}`, ['FILESYSTEM']);
-            return;
-        }
-        if(["␀", "␂", "␃", "␄", "␜", "␟"].some(char => body.includes(char))){
-            PC.halt(`Invalid characters in file body`, ['FILESYSTEM']);
-            return;
-        }
-        const typeMap = {
-            "txt": 0,
-            "a": 1,
-        }
-
-        let fileType = typeMap[type] ?? 0;
-
-        let file = ["␜",  fileType.toString(), "␟", ...name, "␟", ...body, "␜"];
-
-        file = file.map(x => charactersToCode(x)[0]);
-
-        return file;
-    }
-
-    static powerOn(){
-        // get everything from the startup block and put it into the instruction register
-        PC.log("Power on", ['MACHINE STATE']);
-
-        instruction_register.setBlockData([...startup_register.data]);
-
-        PC.Clock = setInterval(() => {
-            if(PC.options.logCycle) PC.log(PC.cycles, ['CYCLE']);
-            // Memory overlap check
-            for(let b in PC.blocks){
-                let block = PC.blocks[b];
-                for (let b2 in PC.blocks) {
-                    if (b !== b2) {
-                        let block2 = PC.blocks[b2];
-                        if (block.start <= block2.end && block.end >= block2.start) {
-                            PC.halt(`Memory block overlap detected between block ${b} and block ${b2}`);
-                            return;
-                        }
-                    }
-                }
-                if(block.end - block.start > PC.mem.length){
-                    PC.halt(`Memory block ${b} exceeds available memory size`);
-                    return;
-                }
-            }
-
-            PC.#runMachineCode(instruction_register);
-
-            PC.cycles++;
-        }, PC.options.msPerCycle);
-    }
-
-    static powerOff(){
-        PC.resetVolatileMemory();
-        setTimeout(() => {
-            PC.log("Power off", ['MACHINE STATE']);
-        }, 10)
-    }
-
-    static getInstructionIndexes() {
+    getInstructionIndexes() {
         let indexes = [];
-        for (let i = 0; i < instruction_register.data.length; i++) {
+        for (let i = 0; i < this.register.data.length; i++) {
             indexes.push(i);
-            i += instruction_register.data[i] - 1;
+            i += this.register.data[i] - 1;
         }
         return indexes;
     }
 
-    static instruct(array) {
+    executeNextInstruction(){
+        let instructionStart = this.pointer;
+        let instructionLength = this.register.data[instructionStart]
+
+        if(instructionLength == undefined){
+            if(this.name == "thread_main") PC.log(`No instructions to execute on thread ${this.name}`, ['LOG']);
+            return;
+        }
+        
+        PC.log(`Executing instruction at address ${instructionStart} in register ${this.name}`, ['FOUND']);
+
+        let instruction = this.register.data.slice(instructionStart, instructionStart + instructionLength);
+        if(instruction == undefined && instruction.length == 0){
+            if(this.name == "thread_main") PC.log(`No instructions to execute on thread ${this.name}`, ['LOG']);
+        } else {
+
+            if (instruction.length !== instructionLength) {
+                PC.halt(`Instruction length mismatch: expected ${instructionLength}, got ${instruction.length}`, ['MACHINE CODE']);
+                return;
+            }
+
+            this.instruct(instruction);
+
+            PC.diagnostics.instructionsProcessed++;
+            let size = this.register.data[this.pointer];
+
+            if (!this.didJump) {
+                if(size != undefined) this.pointer += size;
+            } else {
+                this.didJump = false;
+            }
+        }
+    }
+
+    instruct(array) {
         let opCode = array[1];
         let args = array.slice(2);
+
         if(opCode == undefined){
             PC.halt(`Opcode is undefined. Most likely forgot to add it to the OPCODE object`, ['MACHINE CODE']);
             return;
@@ -649,16 +446,16 @@ class PC {
                 }
 
                 // calculate the indexes of the instruction register
-                let indexes = PC.getInstructionIndexes();
+                let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
                     return;
                 }
 
-                jump_return_register.setByte(0, PC.instructionPointer);
-                PC.instructionPointer = indexes[args[0]];
-                PC.didJump = true;
+                jump_return_register.setByte(0, this.pointer);
+                this.pointer = indexes[args[0]];
+                this.pointer = true;
 
                 PC.log(`Jumped to instruction at instruction index ${indexes[args[0]]}`, ['MACHINE CODE', 'SUCCESS']);
             } break;
@@ -693,7 +490,7 @@ class PC {
                 }
 
                 // calculate the indexes of the instruction register
-                let indexes = PC.getInstructionIndexes();
+                let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
@@ -701,9 +498,9 @@ class PC {
                 }
 
                 if (ram.data[args[0]] === 0) {
-                    jump_return_register.setByte(0, PC.instructionPointer);
-                    PC.instructionPointer = indexes[args[0]];
-                    PC.didJump = true;
+                    jump_return_register.setByte(0, this.pointer);
+                    this.pointer = indexes[args[0]];
+                    this.pointer = true;
                     PC.log(`Jumped to instruction at instruction index ${indexes[args[0]]} because value is zero`, ['MACHINE CODE', 'SUCCESS']);
                 } else {
                     PC.log(`Did not jump to instruction at index ${indexes[args[0]]} because value is not zero`, ['MACHINE CODE', 'INFO']);
@@ -716,7 +513,7 @@ class PC {
                     return;
                 }
                 // calculate the indexes of the instruction register
-                let indexes = PC.getInstructionIndexes();
+                let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
@@ -736,10 +533,10 @@ class PC {
                     return;
                 }
 
-                if( ram.data[address] !== 0) {
-                    jump_return_register.setByte(0, PC.instructionPointer);
-                    PC.instructionPointer = indexes[index];
-                    PC.didJump = true;
+                if(ram.data[address] !== 0) {
+                    jump_return_register.setByte(0, this.pointer);
+                    this.pointer = indexes[index];
+                    this.didJump = true;
                     PC.log(`Jumped to instruction at instruction index ${indexes[index]} because value is not zero`, ['MACHINE CODE', 'SUCCESS']);
                 } else {
                     PC.log(`Did not jump to instruction at index ${indexes[index]} because value is zero`, ['MACHINE CODE', 'INFO']);
@@ -747,9 +544,9 @@ class PC {
             } break;
 
             case "halt": {
-                PC.log(`Halting execution at instruction pointer ${PC.instructionPointer}`, ['MACHINE CODE', 'INFO']);
-                PC.instructionPointer = 0;
-                instruction_register.setBlockData(new Array(instruction_register.size).fill(undefined));
+                PC.log(`Halting execution at instruction pointer ${this.pointer}`, ['MACHINE CODE', 'INFO']);
+                this.pointer = 0;
+                main_thread.setBlockData(new Array(main_thread.size).fill(undefined));
                 PC.log("Instruction interpretation stopped", ['MACHINE CODE', 'SUCCESS']);
             } break;
 
@@ -764,10 +561,10 @@ class PC {
                     return;
                 }
 
-                PC.instructionPointer = jump_return_register.data[0];
+                this.pointer = jump_return_register.data[0];
                 jump_return_register.data[0] = undefined;
 
-                PC.log(`Jumping to return address ${PC.instructionPointer} from jump-return register`, ['MACHINE CODE', 'FOUND', 'SUCCESS']);
+                PC.log(`Jumping to return address ${this.pointer} from jump-return register`, ['MACHINE CODE', 'FOUND', 'SUCCESS']);
             } break;
 
             case "goto": {
@@ -777,14 +574,14 @@ class PC {
                 }
 
                 // calculate the indexes of the instruction register
-                let indexes = PC.getInstructionIndexes();
+                let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
                     return;
                 }
 
-                PC.instructionPointer = indexes[args[0]];
+                this.pointer = indexes[args[0]];
                 PC.log(`Goto instruction at instruction index ${indexes[args[0]]}`, ['MACHINE CODE', 'SUCCESS']);
             } break;
 
@@ -794,7 +591,7 @@ class PC {
                     return;
                 }
                 // calculate the indexes of the instruction register
-                let indexes = PC.getInstructionIndexes();
+                let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
@@ -806,7 +603,7 @@ class PC {
                     return;
                 }
                 if (ram.data[args[0]] === 0) {
-                    PC.instructionPointer = indexes[args[1]];
+                    this.pointer = indexes[args[1]];
                     PC.log(`Goto instruction at instruction index ${indexes[args[1]]} because value is zero`, ['MACHINE CODE', 'SUCCESS']);
                 } else {
                     PC.log(`Did not goto instruction at index ${indexes[args[1]]} because value is not zero`, ['MACHINE CODE', 'INFO']);
@@ -819,7 +616,7 @@ class PC {
                     return;
                 }
                 // calculate the indexes of the instruction register
-                let indexes = PC.getInstructionIndexes();
+                let indexes = this.getInstructionIndexes();
                 if (args[0] < 0 || args[0] >= indexes.length) {
                     PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
                     return;
@@ -829,7 +626,7 @@ class PC {
                     return;
                 }
                 if (ram.data[args[0]] !== 0) {
-                    PC.instructionPointer = indexes[args[1]];
+                    this.pointer = indexes[args[1]];
                     PC.log(`Goto instruction at instruction index ${indexes[args[1]]} because value is not zero`, ['MACHINE CODE', 'SUCCESS']);
                 } else {
                     PC.log(`Did not goto instruction at index ${indexes[args[1]]} because value is zero`, ['MACHINE CODE', 'INFO']);
@@ -839,7 +636,7 @@ class PC {
             case "nop": {} break;
 
             case "clear": {
-                instruction_register.setBlockData(new Array(instruction_register.size).fill(undefined));
+                main_thread.setBlockData(new Array(main_thread.size).fill(undefined));
             } break;
 
             default: {
@@ -847,6 +644,242 @@ class PC {
                 return;
             }
         }
+    }
+}
+
+class PC {
+    static blocks = {};
+    static mem = new Array(0xffff).fill(null);
+    static Clock = null;
+    static instructionPointer = 0;
+    static threadPool = new Map();
+
+    static halt(message, prefixes = []){
+        PC.log(message, prefixes.concat(['ERROR']));
+        PC.powerOff();
+    }
+
+    static options = {
+        logging: true,
+        logCycle: false,
+        simpleLog: false,
+        logFilter: ["PROGRAM LOG", "ERROR", "WARN"],
+        msPerCycle: 20 // 20,
+    }
+
+    static diagnostics = {
+        instructionsProcessed: 0,
+    }
+
+    static log(message, prefixes = []) {
+        if(!PC.options.logging) return;
+        const styles = {
+            INFO: 'color: #0af; font-weight: bold;',
+            SUCCESS: 'color: #0c0; font-weight: bold;',
+            ERROR: 'color: #f33; font-weight: bold;',
+            WARN: 'color: orange; font-weight: bold;',
+            LOG: 'color: gray; font-weight: bold;',
+            "PROGRAM LOG": 'color: #00c4c4; font-weight: bold;', // #F34EF3
+            CYCLE: 'color: #F3F34E; font-weight: bold;',
+            FOUND: 'color: #9b59b6; font-weight: bold;',
+            "MACHINE CODE": 'color: #C40000; font-weight: bold;',
+            "MACHINE STATE": 'color: #0000C4; font-weight: bold;',
+            "ASSEMBLY": 'color: #C4C400; font-weight: bold;',
+            "FILESYSTEM": 'color: #C4C4C4; font-weight: bold;',
+        };
+
+        let formatString = '';
+        let styleArray = [];
+
+        for (let prefix of prefixes) {
+            formatString += `%c[${prefix}] `;
+            styleArray.push(styles[prefix] || styles.LOG);
+        }
+
+        formatString += '%c' + message;
+        styleArray.push('color: inherit;');
+
+        function out(){
+            if(prefixes.includes("ERROR")) console.error(formatString, ...styleArray)
+            else if(prefixes.includes("WARN")) console.warn(formatString, ...styleArray);
+            else console.log(formatString, ...styleArray);
+        }
+
+        if (PC.options.simpleLog) {
+            if (PC.options.logFilter.length > 0 && !prefixes.some(prefix => PC.options.logFilter.includes(prefix))) {
+                return;
+            } else {
+                out();
+            }
+        } else {
+            out();
+        }
+
+        
+    
+    }
+
+    static output(message, prefixes = {}) {
+        console.log('%c[OUTPUT]%c ' + message, 'color: #0c0; font-weight: bold;', 'color: inherit;');
+    }
+
+    static clearScreen() {
+        const screen = document.getElementById('screen');
+        const columns = screen.clientWidth / 8;
+        const rows = screen.clientHeight / 8;
+
+        for(let i = 0; i < columns * rows; i++) {
+            const x = i % columns;
+            const y = Math.floor(i / columns);
+            const cell = document.getElementById(`cell-${x}-${y}`);
+            cell.style.backgroundColor = '#FFFFFF';
+            cell.style.color = '#000000';
+            cell.textContent = '';
+        }
+    }
+
+    static mapOpcode(opcode) {
+        if (typeof opcode === 'string') {
+            return Object.keys(OPCODE).find(key => OPCODE[key] === opcode) || -1;
+        } else if (typeof opcode === 'number') {
+            return Object.entries(OPCODE).find(([key, value]) => value === opcode)?.[0] || -1;
+        }
+        return null;
+    }
+
+    static cycles = 0;
+    static didJump = false;
+
+    static compileToMachineCode(assemblyString){
+        let lines = assemblyString.trim().split(/\n/).map(line => line.trim()).filter(line => line.length > 0);
+
+        PC.log(`Compiling assembly code to machine code`, ['ASSEMBLY']);
+
+        let result = [];
+        for(let line of lines){
+            let parts = line.split(' ');
+            parts[0] = ASSEMBLY_MAP[parts[0].toLowerCase()];
+
+            if(parts[0] == undefined){
+                PC.log(`Invalid instruction: ${line}`, ['ASSEMBLY', 'ERROR']);
+                return [2, OPCODE.clear]
+            }
+
+            parts.forEach((part, index) => {
+                if(typeof part !== 'number' && !isNaN(part)){
+                    parts[index] = parseInt(part, 10);
+                }
+            });
+
+            result.push(parts.length + 1)
+            result.push(...parts)
+        }
+
+        return result
+    }
+
+    static resetVolatileMemory() {
+        ram.setBlockData(new Array(ram.size).fill(undefined));
+        main_thread.setBlockData(new Array(main_thread.size).fill(undefined));
+        jump_return_register.setBlockData(new Array(jump_return_register.size).fill(undefined));
+        PC.threadPool = new Map();
+        PC.cycles = 0;
+        clearInterval(PC.Clock);
+        PC.diagnostics.instructionsProcessed = 0;
+        PC.Clock = null;
+        PC.clearScreen();
+    }
+
+    static createFile(name, body, type){
+        if(name.match(/[a-zA-Z0-9_]+/) === null){
+            PC.halt(`Invalid file name: ${name}. Only alphanumeric characters and underscores are allowed.`, ['FILESYSTEM']);
+            return;
+        }
+        if(body.length > 0x7FFF - filesystem.start){
+            PC.halt(`File body exceeds maximum size of ${0x7FFF - filesystem.start} bytes`, ['FILESYSTEM']);
+            return;
+        }
+        if(["␀", "␂", "␃", "␄", "␜", "␟"].includes(name)){
+            PC.halt(`Invalid characters in file name: ${name}`, ['FILESYSTEM']);
+            return;
+        }
+        if(["␀", "␂", "␃", "␄", "␜", "␟"].some(char => body.includes(char))){
+            PC.halt(`Invalid characters in file body`, ['FILESYSTEM']);
+            return;
+        }
+
+        const typeMap = {
+            "txt": 0, // text
+            "a": 1, // assembly
+        }
+
+        let fileType = typeMap[type] ?? 0;
+
+        let file = ["␜",  fileType.toString(), "␟", ...name, "␟", ...body, "␜"];
+
+        file = file.map(x => charactersToCode(x)[0]);
+
+        return file;
+    }
+
+    static powerOn(){
+        // get everything from the startup block and put it into the instruction register
+        PC.log("Power on", ['MACHINE STATE']);
+
+        main_thread.setBlockData([...startup_register.data]);
+
+        PC.addThread("thread_main", main_thread);
+        PC.addThread("thread_b", thread_b);
+        PC.addThread("thread_c", thread_c);
+        PC.addThread("thread_d", thread_d);
+        PC.addThread("thread_e", thread_e);
+        PC.addThread("thread_f", thread_f);
+
+        PC.Clock = setInterval(() => {
+            if(PC.options.logCycle) PC.log(PC.cycles, ['CYCLE']);
+            // Memory overlap check
+            for(let b in PC.blocks){
+                let block = PC.blocks[b];
+                for (let b2 in PC.blocks) {
+                    if (b !== b2) {
+                        let block2 = PC.blocks[b2];
+                        if (block.start <= block2.end && block.end >= block2.start) {
+                            PC.halt(`Memory block overlap detected between block ${b} and block ${b2}`);
+                            return;
+                        }
+                    }
+                }
+                if(block.end - block.start > PC.mem.length){
+                    PC.halt(`Memory block ${b} exceeds available memory size`);
+                    return;
+                }
+            }
+
+            // for each thread in the thread pool, execute the instruction
+
+            PC.threadPool.forEach((thread, name) => {
+                thread.executeNextInstruction();
+            });
+
+            PC.cycles++;
+        }, PC.options.msPerCycle);
+    }
+
+    static powerOff(){
+        PC.resetVolatileMemory();
+        setTimeout(() => {
+            PC.log("Power off", ['MACHINE STATE']);
+        }, 10)
+    }
+
+    static addThread(name, register){
+        if(PC.threadPool.has(name)){
+            PC.halt(`Thread with name ${name} already exists`, ['MACHINE STATE']);
+            return;
+        }
+
+        PC.threadPool.set(name, new ThreadContext(name, register));
+        PC.log(`Thread ${name} partitioned`, ['MACHINE STATE']);
     }
 }
 
@@ -901,10 +934,15 @@ let colorBlock = new Block("colors", 0, 47); // 16*3 = 48
 let characterBlock = new Block("character_map", 48, 303); // 255
 let ram = new Block("RAM", 304, 2854);
 
-let instruction_register = new Block("instruction_register", 2855, 5855);
+let main_thread = new Block("thread_a", 2855, 5855);
 let startup_register = new Block("startup", 5856, 6856);
 let jump_return_register = new Block("jump_return_register", 6857, 6857);
 let filesystem = new Block("filesystem", 6858, 0x7FFF); // 0xFFFF - 0x1A00 = 0xE000
+let thread_b = new Block("thread_b", 0x8000, 0x8000 + 1000);
+let thread_c = new Block("thread_c", 33769, 34769);
+let thread_d = new Block("thread_d", 34770, 35770);
+let thread_e = new Block("thread_e", 35771, 36771);
+let thread_f = new Block("thread_f", 36772, 37772);
 
 colorBlock.setBlockData([
     0x0,  0x0,  0x0,  // #000000
@@ -1062,25 +1100,10 @@ const codeToCharacters = (arr) => {
     return arr.map(index => characterBlockVisualized()[index]).join("");
 }
 
-// startup_register.setBlockData([
-//     4, OPCODE.store, 3, 153,
-//     4, OPCODE.store, 0, 100,
-//     4, OPCODE.store, 1, 0,
-//     3, OPCODE.goto, 6,
-//     // simulated function start
-//     5, OPCODE.add, 0, 1, 1,
-//     3, OPCODE.print, 1,
-//     // simulated function end
-//     2, OPCODE.return,
-//     3, OPCODE.jump, 4, // function call
-//     3, OPCODE.jump, 4,
-//     3, OPCODE.print, 3,
-//     3, OPCODE.jump, 4,
-//     3, OPCODE.jump, 4,
-//     3, OPCODE.jump, 4,
-//     3, OPCODE.jump, 4,
-// ]);
-
-/*
-add PROCEDURES
-*/
+startup_register.setBlockData([
+    4, OPCODE.store, 0, 10, // x
+    4, OPCODE.store, 1, 1, // 1
+    5, OPCODE.subtract, 0, 1, 0,
+    3, OPCODE.print, 0,
+    4, OPCODE.jump_if_not_zero, 0, 2,
+]);
