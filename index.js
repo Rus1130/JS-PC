@@ -36,6 +36,27 @@ class Block {
         });
     }
 
+    removeIndexes(start, length) {
+        if (start < 0 || length < 0 || start + length > this.data.length) {
+            PC.halt(`Invalid range for block ${this.name}: start=${start}, length=${length}`);
+            return;
+        }
+
+        // Slice and store the values being removed
+        const removed = this.data.slice(start, start + length);
+
+        // Mark them as undefined
+        for (let i = start; i < start + length; i++) {
+            this.data[i] = undefined;
+        }
+
+        // Shift all defined elements to the front, pad with undefineds
+        const defined = this.data.filter(x => x !== undefined);
+        this.data = defined.concat(new Array(this.size - defined.length).fill(undefined));
+
+        return removed;
+    }
+
     pushBlockData(data){
         // find the first undefined index in the block
         let firstUndefinedIndex = this.data.findIndex(byte => byte === undefined);
@@ -108,6 +129,15 @@ class ThreadContext {
         for (let i = 0; i < this.register.data.length; i++) {
             indexes.push(i);
             i += this.register.data[i] - 1;
+        }
+        return indexes;
+    }
+
+    getInstuctionIndexes(array){
+        let indexes = [];
+        for (let i = 0; i < array.length; i++) {
+            indexes.push(i);
+            i += array[i] - 1;
         }
         return indexes;
     }
@@ -633,6 +663,45 @@ class ThreadContext {
                 }
             } break;
 
+            case "thread": {
+                const threadIndexes = ["main", "a", "b", "c", "d", "e"];
+                let threadId = args[0];
+                let n = args[1];
+
+                if (threadIndexes[threadId] === undefined) {
+                    PC.halt(`Thread ID ${threadId} is out of bounds`, ['MACHINE CODE']);
+                    return;
+                }
+
+                const threadKey = `thread_${threadIndexes[threadId]}`;
+                const thread = PC.threadPool.get(threadKey);
+                if (!thread) {
+                    PC.halt(`Thread ${threadKey} does not exist`, ['MACHINE CODE']);
+                    return;
+                }
+
+                // Start just after current instruction
+                let cursor = this.pointer + array.length;
+                let totalLength = 0;
+
+                for (let i = 0; i < n; i++) {
+                    const instrLen = this.register.data[cursor];
+                    if (instrLen === undefined) {
+                        PC.halt(`Unexpected end of instruction block while reading thread contents`, ['MACHINE CODE']);
+                        return;
+                    }
+                    totalLength += instrLen;
+                    cursor += instrLen;
+                }
+
+                // Remove from main and transfer to thread
+                const removed = this.register.removeIndexes(this.pointer + array.length, totalLength);
+                thread.register.pushBlockData(removed);
+
+                PC.log(`Moved ${n} instruction(s) to ${threadKey}`, ['MACHINE CODE', 'SUCCESS']);
+                break;
+            }
+
             case "nop": {} break;
 
             case "clear": {
@@ -829,11 +898,11 @@ class PC {
         main_thread.setBlockData([...startup_register.data]);
 
         PC.addThread("thread_main", main_thread);
+        PC.addThread("thread_a", thread_a);
         PC.addThread("thread_b", thread_b);
         PC.addThread("thread_c", thread_c);
         PC.addThread("thread_d", thread_d);
         PC.addThread("thread_e", thread_e);
-        PC.addThread("thread_f", thread_f);
 
         PC.Clock = setInterval(() => {
             if(PC.options.logCycle) PC.log(PC.cycles, ['CYCLE']);
@@ -903,6 +972,7 @@ const OPCODE = {
     set_pixel: 16,
     nop: 17,
     clear: 18,
+    thread: 19,
 }
 
 const ASSEMBLY_MAP = {
@@ -926,6 +996,7 @@ const ASSEMBLY_MAP = {
     spix: OPCODE.set_pixel,
     nop: OPCODE.nop,
     clear: OPCODE.clear,
+    thread: OPCODE.thread,
 }
 
 
@@ -938,11 +1009,11 @@ let main_thread = new Block("thread_a", 2855, 5855);
 let startup_register = new Block("startup", 5856, 6856);
 let jump_return_register = new Block("jump_return_register", 6857, 6857);
 let filesystem = new Block("filesystem", 6858, 0x7FFF); // 0xFFFF - 0x1A00 = 0xE000
-let thread_b = new Block("thread_b", 0x8000, 0x8000 + 1000);
-let thread_c = new Block("thread_c", 33769, 34769);
-let thread_d = new Block("thread_d", 34770, 35770);
-let thread_e = new Block("thread_e", 35771, 36771);
-let thread_f = new Block("thread_f", 36772, 37772);
+let thread_a = new Block("thread_a", 0x8000, 0x8000 + 1000);
+let thread_b = new Block("thread_b", 33769, 34769);
+let thread_c = new Block("thread_c", 34770, 35770);
+let thread_d = new Block("thread_d", 35771, 36771);
+let thread_e = new Block("thread_e", 36772, 37772);
 
 colorBlock.setBlockData([
     0x0,  0x0,  0x0,  // #000000
@@ -1101,9 +1172,56 @@ const codeToCharacters = (arr) => {
 }
 
 startup_register.setBlockData([
-    4, OPCODE.store, 0, 10, // x
+    4, OPCODE.store, 0, 0, // y
     4, OPCODE.store, 1, 1, // 1
-    5, OPCODE.subtract, 0, 1, 0,
-    3, OPCODE.print, 0,
-    4, OPCODE.jump_if_not_zero, 0, 2,
+    4, OPCODE.store, 2, 20, // x1
+    4, OPCODE.store, 3, 20, // x2
+    4, OPCODE.store, 4, 20, // x3
+    4, OPCODE.store, 5, 20, // x4
+
+    4, OPCODE.store, 20, 20,
+    4, OPCODE.store, 40, 40,
+    4, OPCODE.store, 60, 60,
+
+    4, OPCODE.store, 7, 1, // back color
+    4, OPCODE.store, 8, 15, // fore color
+    4, OPCODE.store, 9, 0, // character
+
+    4, OPCODE.thread, 1, 3, // start thread with 5 instructions
+    5, OPCODE.subtract, 2, 1, 2,
+    7, OPCODE.set_pixel, 2, 0, 7, 8, 9, // set pixel at (x, y) with back color, fore color and character
+    4, OPCODE.jump_if_not_zero, 2, 0,
+
+    4, OPCODE.thread, 2, 5, // start thread with 5 instructions
+    5, OPCODE.subtract, 3, 1, 3,
+    5, OPCODE.add, 3, 20, 3,
+    7, OPCODE.set_pixel, 3, 0, 7, 8, 9, // set pixel at (x, y) with back color, fore color and character
+    5, OPCODE.subtract, 3, 20, 3,
+    4, OPCODE.jump_if_not_zero, 3, 0,
+
+    4, OPCODE.thread, 3, 5, // start thread with 5 instructions
+    5, OPCODE.subtract, 4, 1, 4,
+    5, OPCODE.add, 4, 40, 4,
+    7, OPCODE.set_pixel, 4, 0, 7, 8, 9, // set pixel at (x, y) with back color, fore color and character
+    5, OPCODE.subtract, 4, 40, 4,
+    4, OPCODE.jump_if_not_zero, 4, 0,
+
+    4, OPCODE.thread, 4, 5, // start thread with 5 instructions
+    5, OPCODE.subtract, 5, 1, 5,
+    5, OPCODE.add, 5, 60, 5,
+    7, OPCODE.set_pixel, 5, 0, 7, 8, 9, // set pixel at (x, y) with back color, fore color and character
+    5, OPCODE.subtract, 5, 60, 5,
+    4, OPCODE.jump_if_not_zero, 5, 0,
+
+
+    // 4, OPCODE.store, 0, 20, // x
+    // 4, OPCODE.store, 1, 1, // 1
+    // 4, OPCODE.store, 2, 0, // y
+    // 4, OPCODE.store, 3, 1, // back color
+    // 4, OPCODE.store, 4, 15, // fore color
+    // 4, OPCODE.store, 5, 0, // character
+    // 4, OPCODE.thread, 1, 3,
+    // 5, OPCODE.subtract, 0, 1, 0,
+    // 7, OPCODE.set_pixel, 0, 2, 3, 4, 5, // set pixel at (x, y) with back color, fore color and character
+    // 4, OPCODE.jump_if_not_zero, 0, 0,
 ]);

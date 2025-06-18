@@ -120,4 +120,55 @@ clears the instruction register
 2, OPCODE.clear
 ```
 
+## thread
+gives instructions to a new thread.<br>
+Thread codes:
+* `0` - main thread, default, do not need use a thread keyword to specify this
+* `1` - thread a
+* `2` - thread b
+* `3` - thread c
+* `4` - thread d
+* `5` - thread e
+```
+4, OPCODE.thread, [thread_id], [n]
+```
+The next `n` instructions will be passed to the specified thead.
+**NOTE: Make sure all indexes are adjusted accordingly**
+Examples:
+```
+Original: 
+    4, OPCODE.store, 0, 80,
+    4, OPCODE.store, 1, 1,
+    4, OPCODE.store, 2, 0,
+    4, OPCODE.store, 3, 1,
+    4, OPCODE.store, 4, 15,
+    4, OPCODE.store, 5, 0,
+    5, OPCODE.subtract, 0, 1, 0,
+    7, OPCODE.set_pixel, 0, 2, 3, 4, 5,
+    4, OPCODE.jump_if_not_zero, 0, 5,
+
+Incorrectly threaded:
+    4, OPCODE.store, 0, 80,
+    4, OPCODE.store, 1, 1,
+    4, OPCODE.store, 2, 0,
+    4, OPCODE.store, 3, 1,
+    4, OPCODE.store, 4, 15,
+    4, OPCODE.store, 5, 0,
+    3, OPCODE.thread, 1, 3,
+    5, OPCODE.subtract, 0, 1, 0,
+    7, OPCODE.set_pixel, 0, 2, 3, 4, 5,
+    4, OPCODE.jump_if_not_zero, 0, 5, // will throw an error because the jump index is not adjusted
+
+Correctly threaded:
+    4, OPCODE.store, 0, 80,
+    4, OPCODE.store, 1, 1,
+    4, OPCODE.store, 2, 0,
+    4, OPCODE.store, 3, 1,
+    4, OPCODE.store, 4, 15,
+    4, OPCODE.store, 5, 0,
+    3, OPCODE.thread, 1, 3,
+    5, OPCODE.subtract, 0, 1, 0, // will jump to here, which is now index 0 of thread a
+    7, OPCODE.set_pixel, 0, 2, 3, 4, 5,
+    4, OPCODE.jump_if_not_zero, 0, 0,
+```
 
