@@ -147,19 +147,21 @@ class ThreadContext {
         let instructionLength = this.register.data[instructionStart]
 
         if(instructionLength == undefined){
-            if(this.name == "thread_main") PC.log(`No instructions to execute on thread ${this.name}`, ['LOG']);
+            if(PC.options.logEmptyThreads && this.name != "thread_0") PC.log(`No instructions to execute`, [this.name, 'LOG'])
+            else if(this.name == "thread_0") PC.log(`No instructions to execute`, [this.name, 'LOG']);
             return;
         }
         
-        PC.log(`Executing instruction at address ${instructionStart} in register ${this.name}`, ['FOUND']);
+        PC.log(`Executing instruction at index ${instructionStart} in thread ${this.name}`, [this.name,'FOUND']);
 
         let instruction = this.register.data.slice(instructionStart, instructionStart + instructionLength);
         if(instruction == undefined && instruction.length == 0){
-            if(this.name == "thread_main") PC.log(`No instructions to execute on thread ${this.name}`, ['LOG']);
+            if(PC.options.logEmptyThreads && this.name != "thread_0") PC.log(`No instructions to execute`, [this.name, 'LOG'])
+            else if(this.name == "thread_0") PC.log(`No instructions to execute`, [this.name, 'LOG']);
         } else {
 
             if (instruction.length !== instructionLength) {
-                PC.halt(`Instruction length mismatch: expected ${instructionLength}, got ${instruction.length}`, ['MACHINE CODE']);
+                PC.halt(`Instruction length mismatch: expected ${instructionLength}, got ${instruction.length}`, [this.name, 'MACHINE CODE']);
                 return;
             }
 
@@ -181,44 +183,44 @@ class ThreadContext {
         let args = array.slice(2);
 
         if(opCode == undefined){
-            PC.halt(`Opcode is undefined. Most likely forgot to add it to the OPCODE object`, ['MACHINE CODE']);
+            PC.halt(`Opcode is undefined. Most likely forgot to add it to the OPCODE object`, [this.name,'MACHINE CODE']);
             return;
         }
 
-        PC.log(`Executing instruction with opcode: ${opCode}, args: ${args}`, ['MACHINE CODE', 'INFO']);
+        PC.log(`Executing instruction with opcode: ${opCode}, args: ${args}`, [this.name,'MACHINE CODE', 'INFO']);
 
         if (PC.mapOpcode(opCode) == null) {
-            PC.halt(`Invalid syntax: Malformed instruction with opcode ${opCode}. Length may not be correct?`, ['MACHINE CODE']);
+            PC.halt(`Invalid syntax: Malformed instruction with opcode ${opCode}. Length may not be correct?`, [this.name,'MACHINE CODE']);
             return;
         }
         if (PC.mapOpcode(opCode) === -1) {
-            PC.halt(`Invalid opcode: ${opCode} is not a valid opcode`, ['MACHINE CODE']);
+            PC.halt(`Invalid opcode: ${opCode} is not a valid opcode`, [this.name,'MACHINE CODE']);
             return;
         }
 
         let instructionName = PC.mapOpcode(opCode);
-        PC.log(`Instruction name: ${instructionName}`, ['MACHINE CODE', 'INFO']);
+        PC.log(`Instruction name: ${instructionName}`, [this.name,'MACHINE CODE', 'INFO']);
 
         switch (instructionName) {
             case 'store': {
                 if (args.length !== 2) {
-                    PC.halt(`Invalid number of arguments for store: expected 2, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for store: expected 2, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 let address = args[0];
                 let value = args[1];
 
                 if (address < 0 || address >= ram.data.length) {
-                    PC.halt(`Address out of bounds for store: ${address}`, ['MACHINE CODE']);
+                    PC.halt(`Address out of bounds for store: ${address}`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 if (typeof value !== 'number' || value < 0 || value > 0xffff) {
-                    PC.halt(`Invalid value for store: ${value}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid value for store: ${value}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 ram.setByte(address, value);
-                PC.log(`Stored value ${value} at address ${address} in RAM`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Stored value ${value} at address ${address} in RAM`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "print_c": {
@@ -226,31 +228,31 @@ class ThreadContext {
                     let value = args[0];
 
                     if (ram.data[value] === undefined) {
-                        PC.halt(`Address ${value} in RAM does not exist for print_c`, ['MACHINE CODE']);
+                        PC.halt(`Address ${value} in RAM does not exist for print_c`, [this.name,'MACHINE CODE']);
                         return;
                     }
 
                     let char = characterBlockVisualized()[ram.data[value]];
 
                     if (char == undefined) {
-                        PC.log(`Character at index ${ram.data[value]} does not exist. Displaying first character instead`, ['MACHINE CODE', 'WARN']);
+                        PC.log(`Character at index ${ram.data[value]} does not exist. Displaying first character instead`, [this.name,'MACHINE CODE', 'WARN']);
                         char = characterBlockVisualized()[0];
                     }
 
                     PC.log(`Character: '${char}'`, ['MACHINE CODE', 'PROGRAM LOG']);
-                    PC.log(`Printed character from RAM at address ${value}: ${char}`, ['MACHINE CODE', 'SUCCESS']);
+                    PC.log(`Printed character from RAM at address ${value}: ${char}`, [this.name,'MACHINE CODE', 'SUCCESS']);
                 } else {
                     let str = '';
                     args.forEach(arg => {
                         if (ram.data[arg] === undefined) {
-                            PC.halt(`Address ${arg} in RAM does not exist for print_c`, ['MACHINE CODE']);
+                            PC.halt(`Address ${arg} in RAM does not exist for print_c`, [this.name,'MACHINE CODE']);
                             return;
                         }
 
                         let char = characterBlockVisualized()[ram.data[arg]];
 
                         if (char == undefined) {
-                            PC.log(`Character at index ${ram.data[arg]} does not exist. Displaying first character instead`, ['MACHINE CODE', 'WARN']);
+                            PC.log(`Character at index ${ram.data[arg]} does not exist. Displaying first character instead`, [this.name,'MACHINE CODE', 'WARN']);
                             char = characterBlockVisualized()[0];
                         }
 
@@ -258,7 +260,7 @@ class ThreadContext {
                     })
 
                     PC.log(`String: '${str}'`, ['MACHINE CODE', 'PROGRAM LOG']);
-                    PC.log(`Printed string from RAM at addresses ${args.join(', ')}: ${str}`, ['MACHINE CODE', 'SUCCESS']);
+                    PC.log(`Printed string from RAM at addresses ${args.join(', ')}: ${str}`, [this.name,'MACHINE CODE', 'SUCCESS']);
                 }
 
             } break;
@@ -267,22 +269,22 @@ class ThreadContext {
                 let value = args[0];
 
                 if (args.length !== 1) {
-                    PC.halt(`Invalid number of arguments for print: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for print: expected 1, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (ram.data[value] === undefined) {
-                    PC.halt(`Address ${value} in RAM does not exist for print`, ['MACHINE CODE']);
+                    PC.halt(`Address ${value} in RAM does not exist for print`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 PC.log("Number: " + ram.data[value], ['MACHINE CODE', 'PROGRAM LOG']);
-                PC.log(`Printed value from RAM at address ${value}: ${ram.data[value]}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Printed value from RAM at address ${value}: ${ram.data[value]}`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "set_pixel": {
                 if (args.length !== 5) {
-                    PC.halt(`Invalid number of arguments for set_pixel: expected 5, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for set_pixel: expected 5, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -293,7 +295,7 @@ class ThreadContext {
                 let characterAddress = ram.data[args[4]];
 
                 if (xAddress === undefined || yAddress === undefined || backColorAddress === undefined || foreColorAddress === undefined || characterAddress === undefined) {
-                    PC.halt(`One or more addresses in set_pixel do not exist in RAM`, ['MACHINE CODE']);
+                    PC.halt(`One or more addresses in set_pixel do not exist in RAM`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -304,20 +306,20 @@ class ThreadContext {
                 let character = characterBlockVisualized()[characterAddress];
                 
                 if (character == undefined) {
-                    PC.log(`Character at index ${args[4]} does not exist. Displaying first character instead`, ['MACHINE CODE', 'WARN']);
+                    PC.log(`Character at index ${args[4]} does not exist. Displaying first character instead`, [this.name,'MACHINE CODE', 'WARN']);
                     character = characterBlockVisualized()[0];
                 }
 
                 let cell = document.getElementById(`cell-${x}-${y}`);
                 if (cell == null) {
-                    PC.log(`Cell at (${x}, ${y}) does not exist. Skipping`, ['MACHINE CODE', 'WARN']);
+                    PC.log(`Cell at (${x}, ${y}) does not exist. Skipping`, [this.name,'MACHINE CODE', 'WARN']);
                 } else {
                     if (backColor == undefined) {
-                        PC.log(`Back color ${args[2]} does not exist. Using #000000 instead`, ['MACHINE CODE', 'WARN']);
+                        PC.log(`Back color ${args[2]} does not exist. Using #000000 instead`, [this.name,'MACHINE CODE', 'WARN']);
                         backColor = "#000000";
                     }
                     if (foreColor == undefined) {
-                        PC.log(`Fore color ${args[3]} does not exist. Using #FFFFFF instead`, ['MACHINE CODE', 'WARN']);
+                        PC.log(`Fore color ${args[3]} does not exist. Using #FFFFFF instead`, [this.name,'MACHINE CODE', 'WARN']);
                         foreColor = "#FFFFFF";
                     }
 
@@ -325,7 +327,7 @@ class ThreadContext {
                     cell.style.color = foreColor;
                     cell.textContent = character;
 
-                    PC.log(`Set pixel at (${x}, ${y}) with back color ${backColor}, fore color ${foreColor}, character '${character}'`, ['MACHINE CODE', 'SUCCESS']);
+                    PC.log(`Set pixel at (${x}, ${y}) with back color ${backColor}, fore color ${foreColor}, character '${character}'`, [this.name,'MACHINE CODE', 'SUCCESS']);
                 }
 
 
@@ -333,7 +335,7 @@ class ThreadContext {
 
             case "add": {
                 if (args.length !== 3) {
-                    PC.halt(`Invalid number of arguments for add: expected 2, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for add: expected 2, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -342,32 +344,32 @@ class ThreadContext {
                 let outputAddress = args[2];
 
                 if( ram.data[address1] === undefined) {
-                    PC.halt(`Address ${address1} in RAM does not exist for add`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address1} in RAM does not exist for add`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 if(ram.data[address2] === undefined) {
-                    PC.halt(`Address ${address2} in RAM does not exist for add`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address2} in RAM does not exist for add`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 let result = ram.data[address1] + ram.data[address2];
                 if (result > 0xffff) {
-                    PC.halt(`Result of addition exceeds byte size: ${result}`, ['MACHINE CODE']);
+                    PC.halt(`Result of addition exceeds byte size: ${result}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (outputAddress < 0 || outputAddress >= ram.data.length) {
-                    PC.halt(`Output address out of bounds for add: ${outputAddress}`, ['MACHINE CODE']);
+                    PC.halt(`Output address out of bounds for add: ${outputAddress}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 ram.setByte(outputAddress, result);
-                PC.log(`Added values at addresses ${address1} and ${address2}, stored result ${result} at address ${outputAddress}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Added values at addresses ${address1} and ${address2}, stored result ${result} at address ${outputAddress}`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "subtract": {
                 if (args.length !== 3) {
-                    PC.halt(`Invalid number of arguments for subtract: expected 2, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for subtract: expected 2, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -376,28 +378,28 @@ class ThreadContext {
                 let outputAddresss = args[2];
 
                 if(ram.data[address1] === undefined) {
-                    PC.halt(`Address ${address1} in RAM does not exist for subtract`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address1} in RAM does not exist for subtract`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 if(ram.data[address2] === undefined) {
-                    PC.halt(`Address ${address2} in RAM does not exist for subtract`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address2} in RAM does not exist for subtract`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 let result = ram.data[address1] - ram.data[address2];
 
                 if (outputAddresss < 0 || outputAddresss >= ram.data.length) {
-                    PC.halt(`Output address out of bounds for subtract: ${outputAddresss}`, ['MACHINE CODE']);
+                    PC.halt(`Output address out of bounds for subtract: ${outputAddresss}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 ram.setByte(outputAddresss, result);
 
-                PC.log(`Subtracted values at addresses ${address1} and ${address2}, stored result ${result} at address ${outputAddresss}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Subtracted values at addresses ${address1} and ${address2}, stored result ${result} at address ${outputAddresss}`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "multiply": {
                 if (args.length !== 3) {
-                    PC.halt(`Invalid number of arguments for multiply: expected 2, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for multiply: expected 2, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -406,33 +408,33 @@ class ThreadContext {
                 let outputAddress = args[2];
 
                 if(ram.data[address1] === undefined) {
-                    PC.halt(`Address ${address1} in RAM does not exist for multiply`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address1} in RAM does not exist for multiply`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if(ram.data[address2] === undefined) {
-                    PC.halt(`Address ${address2} in RAM does not exist for multiply`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address2} in RAM does not exist for multiply`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 let mulResult = ram.data[address1] * ram.data[address2];
                 if (mulResult > 0xffff) {
-                    PC.halt(`Result of multiplication exceeds byte size: ${mulResult}`, ['MACHINE CODE']);
+                    PC.halt(`Result of multiplication exceeds byte size: ${mulResult}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (outputAddress < 0 || outputAddress >= ram.data.length) {
-                    PC.halt(`Output address out of bounds for multiply: ${outputAddress}`, ['MACHINE CODE']);
+                    PC.halt(`Output address out of bounds for multiply: ${outputAddress}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 ram.setByte(outputAddress, mulResult);
-                PC.log(`Multiplied values at addresses ${address1} and ${address2}, stored result ${mulResult} at address ${outputAddress}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Multiplied values at addresses ${address1} and ${address2}, stored result ${mulResult} at address ${outputAddress}`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "divide": {
                 if (args.length !== 3) {
-                    PC.halt(`Invalid number of arguments for divide: expected 2, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for divide: expected 2, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -441,37 +443,37 @@ class ThreadContext {
                 let outputAddress = args[2];
 
                 if(ram.data[address1] === undefined) {
-                    PC.halt(`Address ${address1} in RAM does not exist for divide`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address1} in RAM does not exist for divide`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if(ram.data[address2] === undefined) {
-                    PC.halt(`Address ${address2} in RAM does not exist for divide`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address2} in RAM does not exist for divide`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (ram.data[address2] === 0) {
-                    PC.halt(`Division by zero at address ${address2} in RAM`, ['MACHINE CODE']);
+                    PC.halt(`Division by zero at address ${address2} in RAM`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 let divResult = Math.floor(ram.data[address1] / ram.data[address2]);
                 if (divResult < -0xffff || divResult > 0xffff) {
-                    PC.halt(`Result of division is out of bounds: ${divResult}`, ['MACHINE CODE']);
+                    PC.halt(`Result of division is out of bounds: ${divResult}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (outputAddress < 0 || outputAddress >= ram.data.length) {
-                    PC.halt(`Output address out of bounds for divide: ${outputAddress}`, ['MACHINE CODE']);
+                    PC.halt(`Output address out of bounds for divide: ${outputAddress}`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 ram.setByte(outputAddress, divResult);
-                PC.log(`Divided values at addresses ${address1} and ${address2}, stored result ${divResult} at address ${outputAddress}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Divided values at addresses ${address1} and ${address2}, stored result ${divResult} at address ${outputAddress}`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "jump": {
                 if (args.length !== 1) {
-                    PC.halt(`Invalid number of arguments for jump: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for jump: expected 1, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -479,20 +481,20 @@ class ThreadContext {
                 let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
-                    PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
-                jump_return_register.setByte(0, this.pointer);
+                getProperJumpReturnRegister().setByte(0, this.pointer);
                 this.pointer = indexes[args[0]];
                 this.pointer = true;
 
-                PC.log(`Jumped to instruction at instruction index ${indexes[args[0]]}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Jumped to instruction at instruction index ${indexes[args[0]]}`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "set": {
                 if (args.length !== 2){
-                    PC.halt(`Invalid number of arguments for set: expected 2, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for set: expected 2, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -500,22 +502,22 @@ class ThreadContext {
                 let destAddress = args[1];
 
                 if (ram.data[srcAddress] === undefined) {
-                    PC.halt(`Source address ${srcAddress} in RAM does not exist for set`, ['MACHINE CODE']);
+                    PC.halt(`Source address ${srcAddress} in RAM does not exist for set`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (destAddress < 0 || destAddress >= ram.data.length) {
-                    PC.halt(`Destination address out of bounds for set: ${destAddress}`, ['MACHINE CODE']);
+                    PC.halt(`Destination address out of bounds for set: ${destAddress}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 ram.setByte(destAddress, ram.data[srcAddress]);
-                PC.log(`Set value from source address ${srcAddress} to destination address ${destAddress}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Set value from source address ${srcAddress} to destination address ${destAddress}`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "jump_if_zero": {
                 if (args.length !== 2) {
-                    PC.halt(`Invalid number of arguments for jump_if_zero: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for jump_if_zero: expected 1, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -523,30 +525,30 @@ class ThreadContext {
                 let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
-                    PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (ram.data[args[0]] === 0) {
-                    jump_return_register.setByte(0, this.pointer);
+                    getProperJumpReturnRegister().setByte(0, this.pointer);
                     this.pointer = indexes[args[0]];
                     this.pointer = true;
-                    PC.log(`Jumped to instruction at instruction index ${indexes[args[0]]} because value is zero`, ['MACHINE CODE', 'SUCCESS']);
+                    PC.log(`Jumped to instruction at instruction index ${indexes[args[0]]} because value is zero`, [this.name,'MACHINE CODE', 'SUCCESS']);
                 } else {
-                    PC.log(`Did not jump to instruction at index ${indexes[args[0]]} because value is not zero`, ['MACHINE CODE', 'INFO']);
+                    PC.log(`Did not jump to instruction at index ${indexes[args[0]]} because value is not zero`, [this.name,'MACHINE CODE', 'INFO']);
                 }
             } break;
 
             case "jump_if_not_zero": {
                 if (args.length !== 2) {
-                    PC.halt(`Invalid number of arguments for jump_if_not_zero: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for jump_if_not_zero: expected 1, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 // calculate the indexes of the instruction register
                 let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
-                    PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    PC.halt(`Jump address out of bounds: ${args[0]}, max ${indexes.length - 1}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -554,52 +556,52 @@ class ThreadContext {
                 let index = args[1];
                 
                 if (ram.data[address] === undefined) {
-                    PC.halt(`Address ${address} in RAM does not exist for jump_if_not_zero`, ['MACHINE CODE']);
+                    PC.halt(`Address ${address} in RAM does not exist for jump_if_not_zero`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (index < 0 || index >= indexes.length) {
-                    PC.halt(`Jump address out of bounds: ${index}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    PC.halt(`Jump address out of bounds: ${index}, max ${indexes.length - 1}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if(ram.data[address] !== 0) {
-                    jump_return_register.setByte(0, this.pointer);
+                    getProperJumpReturnRegister().setByte(0, this.pointer);
                     this.pointer = indexes[index];
                     this.didJump = true;
-                    PC.log(`Jumped to instruction at instruction index ${indexes[index]} because value is not zero`, ['MACHINE CODE', 'SUCCESS']);
+                    PC.log(`Jumped to instruction at instruction index ${indexes[index]} because value is not zero`, [this.name,'MACHINE CODE', 'SUCCESS']);
                 } else {
-                    PC.log(`Did not jump to instruction at index ${indexes[index]} because value is zero`, ['MACHINE CODE', 'INFO']);
+                    PC.log(`Did not jump to instruction at index ${indexes[index]} because value is zero`, [this.name,'MACHINE CODE', 'INFO']);
                 }
             } break;
 
             case "halt": {
-                PC.log(`Halting execution at instruction pointer ${this.pointer}`, ['MACHINE CODE', 'INFO']);
+                PC.log(`Halting execution at instruction pointer ${this.pointer}`, [this.name,'MACHINE CODE', 'INFO']);
                 this.pointer = 0;
                 main_thread.setBlockData(new Array(main_thread.size).fill(undefined));
-                PC.log("Instruction interpretation stopped", ['MACHINE CODE', 'SUCCESS']);
+                PC.log("Instruction interpretation stopped", [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "return": {
                 if (args.length !== 0) {
-                    PC.halt(`Invalid number of arguments for return: expected 0, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for return: expected 0, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
-                if (jump_return_register.data[0] === undefined) {
-                    PC.log(`Jump-return register is empty, ignoring`, ['MACHINE CODE', 'WARN']);
+                if (getProperJumpReturnRegister().data[0] === undefined) {
+                    PC.log(`Jump-return register is empty, ignoring`, [this.name,'MACHINE CODE', 'WARN']);
                     return;
                 }
 
-                this.pointer = jump_return_register.data[0];
-                jump_return_register.data[0] = undefined;
+                this.pointer = getProperJumpReturnRegister().data[0];
+                getProperJumpReturnRegister().data[0] = undefined;
 
-                PC.log(`Jumping to return address ${this.pointer} from jump-return register`, ['MACHINE CODE', 'FOUND', 'SUCCESS']);
+                PC.log(`Jumping to return address ${this.pointer} from jump-return register`, [this.name,'MACHINE CODE', 'FOUND', 'SUCCESS']);
             } break;
 
             case "goto": {
                 if (args.length !== 1) {
-                    PC.halt(`Invalid number of arguments for goto: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for goto: expected 1, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
@@ -607,59 +609,59 @@ class ThreadContext {
                 let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
-                    PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 this.pointer = indexes[args[0]];
-                PC.log(`Goto instruction at instruction index ${indexes[args[0]]}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Goto instruction at instruction index ${indexes[args[0]]}`, [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
             case "goto_if_zero": {
                 if (args.length !== 2) {
-                    PC.halt(`Invalid number of arguments for goto_if_zero: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for goto_if_zero: expected 1, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 // calculate the indexes of the instruction register
                 let indexes = this.getInstructionIndexes();
 
                 if (args[0] < 0 || args[0] >= indexes.length) {
-                    PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, [this.name,'MACHINE CODE']);
                     return;
                 }
 
                 if (ram.data[args[0]] === undefined) {
-                    PC.halt(`Address ${args[0]} in RAM does not exist for goto_if_zero`, ['MACHINE CODE']);
+                    PC.halt(`Address ${args[0]} in RAM does not exist for goto_if_zero`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 if (ram.data[args[0]] === 0) {
                     this.pointer = indexes[args[1]];
-                    PC.log(`Goto instruction at instruction index ${indexes[args[1]]} because value is zero`, ['MACHINE CODE', 'SUCCESS']);
+                    PC.log(`Goto instruction at instruction index ${indexes[args[1]]} because value is zero`, [this.name,'MACHINE CODE', 'SUCCESS']);
                 } else {
-                    PC.log(`Did not goto instruction at index ${indexes[args[1]]} because value is not zero`, ['MACHINE CODE', 'INFO']);
+                    PC.log(`Did not goto instruction at index ${indexes[args[1]]} because value is not zero`, [this.name,'MACHINE CODE', 'INFO']);
                 }
             } break;
 
             case "goto_if_not_zero": {
                 if (args.length !== 2) {
-                    PC.halt(`Invalid number of arguments for goto_if_not_zero: expected 1, got ${args.length}`, ['MACHINE CODE']);
+                    PC.halt(`Invalid number of arguments for goto_if_not_zero: expected 1, got ${args.length}`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 // calculate the indexes of the instruction register
                 let indexes = this.getInstructionIndexes();
                 if (args[0] < 0 || args[0] >= indexes.length) {
-                    PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, ['MACHINE CODE']);
+                    PC.halt(`Goto address out of bounds: ${args[0]}, max ${indexes.length - 1}`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 if (ram.data[args[0]] === undefined) {
-                    PC.halt(`Address ${args[0]} in RAM does not exist for goto_if_not_zero`, ['MACHINE CODE']);
+                    PC.halt(`Address ${args[0]} in RAM does not exist for goto_if_not_zero`, [this.name,'MACHINE CODE']);
                     return;
                 }
                 if (ram.data[args[0]] !== 0) {
                     this.pointer = indexes[args[1]];
-                    PC.log(`Goto instruction at instruction index ${indexes[args[1]]} because value is not zero`, ['MACHINE CODE', 'SUCCESS']);
+                    PC.log(`Goto instruction at instruction index ${indexes[args[1]]} because value is not zero`, [this.name,'MACHINE CODE', 'SUCCESS']);
                 } else {
-                    PC.log(`Did not goto instruction at index ${indexes[args[1]]} because value is zero`, ['MACHINE CODE', 'INFO']);
+                    PC.log(`Did not goto instruction at index ${indexes[args[1]]} because value is zero`, [this.name, 'MACHINE CODE', 'INFO']);
                 }
             } break;
 
@@ -698,7 +700,7 @@ class ThreadContext {
                 const removed = this.register.removeIndexes(this.pointer + array.length, totalLength);
                 thread.register.pushBlockData(removed);
 
-                PC.log(`Moved ${n} instruction(s) to ${threadKey}`, ['MACHINE CODE', 'SUCCESS']);
+                PC.log(`Moved ${n} instruction(s) to ${threadKey}`, [this.name, 'MACHINE CODE', 'SUCCESS']);
                 break;
             }
 
@@ -733,7 +735,9 @@ class PC {
         logCycle: false,
         simpleLog: false,
         logFilter: ["PROGRAM LOG", "ERROR", "WARN"],
-        msPerCycle: 20 // 20,
+        msPerCycle: 20, // 20,
+        omitThreadPrefix: false,
+        logEmptyThreads: false,
     }
 
     static diagnostics = {
@@ -755,12 +759,19 @@ class PC {
             "MACHINE STATE": 'color: #0000C4; font-weight: bold;',
             "ASSEMBLY": 'color: #C4C400; font-weight: bold;',
             "FILESYSTEM": 'color: #C4C4C4; font-weight: bold;',
+            "thread_0": 'color: #F34EF3; font-weight: bold;',
+            "thread_a": 'color: #F34EF3; font-weight: bold;',
+            "thread_b": 'color: #F34EF3; font-weight: bold;',
+            "thread_c": 'color: #F34EF3; font-weight: bold;',
+            "thread_d": 'color: #F34EF3; font-weight: bold;',
+            "thread_e": 'color: #F34EF3; font-weight: bold;',
         };
 
         let formatString = '';
         let styleArray = [];
 
         for (let prefix of prefixes) {
+            if (PC.options.omitThreadPrefix && prefix.startsWith("thread_")) continue;
             formatString += `%c[${prefix}] `;
             styleArray.push(styles[prefix] || styles.LOG);
         }
@@ -786,10 +797,6 @@ class PC {
 
         
     
-    }
-
-    static output(message, prefixes = {}) {
-        console.log('%c[OUTPUT]%c ' + message, 'color: #0c0; font-weight: bold;', 'color: inherit;');
     }
 
     static clearScreen() {
@@ -851,6 +858,20 @@ class PC {
         ram.setBlockData(new Array(ram.size).fill(undefined));
         main_thread.setBlockData(new Array(main_thread.size).fill(undefined));
         jump_return_register.setBlockData(new Array(jump_return_register.size).fill(undefined));
+        jump_return_a.setBlockData(new Array(jump_return_a.size).fill(undefined));
+        jump_return_b.setBlockData(new Array(jump_return_b.size).fill(undefined));
+        jump_return_c.setBlockData(new Array(jump_return_c.size).fill(undefined));
+        jump_return_d.setBlockData(new Array(jump_return_d.size).fill(undefined));
+        jump_return_e.setBlockData(new Array(jump_return_e.size).fill(undefined));
+        // delete all threads, threadPool is a set
+        PC.threadPool.forEach((thread, name) => {
+            thread.pointer = 0;
+            thread.active = false;
+            thread.didJump = false;
+            thread.register.setBlockData(new Array(thread.register.size).fill(undefined));
+        });
+
+        filesystem.setBlockData(new Array(filesystem.size).fill(undefined));
         PC.threadPool = new Map();
         PC.cycles = 0;
         clearInterval(PC.Clock);
@@ -897,7 +918,7 @@ class PC {
 
         main_thread.setBlockData([...startup_register.data]);
 
-        PC.addThread("thread_main", main_thread);
+        PC.addThread("thread_0", main_thread);
         PC.addThread("thread_a", thread_a);
         PC.addThread("thread_b", thread_b);
         PC.addThread("thread_c", thread_c);
@@ -1009,11 +1030,27 @@ let main_thread = new Block("thread_a", 2855, 5855);
 let startup_register = new Block("startup", 5856, 6856);
 let jump_return_register = new Block("jump_return_register", 6857, 6857);
 let filesystem = new Block("filesystem", 6858, 0x7FFF); // 0xFFFF - 0x1A00 = 0xE000
+
 let thread_a = new Block("thread_a", 0x8000, 0x8000 + 1000);
 let thread_b = new Block("thread_b", 33769, 34769);
 let thread_c = new Block("thread_c", 34770, 35770);
 let thread_d = new Block("thread_d", 35771, 36771);
 let thread_e = new Block("thread_e", 36772, 37772);
+
+let jump_return_a = new Block("jump_return_a", 37773, 37773);
+let jump_return_b = new Block("jump_return_b", 37774, 37774);
+let jump_return_c = new Block("jump_return_c", 37775, 37775);
+let jump_return_d = new Block("jump_return_d", 37776, 37776);
+let jump_return_e = new Block("jump_return_e", 37777, 37777);
+
+function getProperJumpReturnRegister(){
+    if (this.name == "thread_a") return jump_return_a;
+    else if (this.name == "thread_b") return jump_return_b;
+    else if (this.name == "thread_c") return jump_return_c;
+    else if (this.name == "thread_d") return jump_return_d;
+    else if (this.name == "thread_e") return jump_return_e;
+    else return jump_return_register;
+}
 
 colorBlock.setBlockData([
     0x0,  0x0,  0x0,  // #000000
