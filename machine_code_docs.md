@@ -121,14 +121,7 @@ clears the instruction register
 ```
 
 ## thread
-gives instructions to a new thread.<br>
-Thread codes:
-* `0` - main thread, default, do not need use a thread keyword to specify this
-* `1` - thread a
-* `2` - thread b
-* `3` - thread c
-* `4` - thread d
-* `5` - thread e
+gives instructions to a new thread. There are 10 threads available, numbered from 0 to 9. The main thread is 0.
 ```
 4, OPCODE.thread, [thread_id], [n]
 ```
@@ -167,7 +160,7 @@ Correctly threaded:
     4, OPCODE.store, 4, 15,
     4, OPCODE.store, 5, 0,
     3, OPCODE.thread, 1, 3,
-    5, OPCODE.subtract, 0, 1, 0, // will jump to here, which is now index 0 of thread a
+    5, OPCODE.subtract, 0, 1, 0, // will jump to here, which is now index 0 of thread 1
     7, OPCODE.set_pixel, 0, 2, 3, 4, 5,
     4, OPCODE.jump_if_not_zero, 0, 0,
 ```

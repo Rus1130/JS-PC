@@ -124,6 +124,19 @@ class ThreadContext {
         this.didJump = false;
     }
 
+    static clearAllThreads() {
+        for (let thread of Object.values(PC.threads)) {
+            thread.pointer = 0;
+            thread.active = true;
+            thread.didJump = false;
+            thread.register.setBlockData(new Array(thread.register.size).fill(undefined));
+        }
+    }
+
+    clear() {
+        this.register.setBlockData(new Array(this.register.size).fill(undefined));
+    }
+
     getInstructionIndexes() {
         let indexes = [];
         for (let i = 0; i < this.register.data.length; i++) {
@@ -140,6 +153,19 @@ class ThreadContext {
             i += array[i] - 1;
         }
         return indexes;
+    }
+
+    getProperJumpReturnRegister(){
+        if (this.name == "thread_0") return thread_0_jr;
+        else if (this.name == "thread_1") return thread_1_jr;
+        else if (this.name == "thread_2") return thread_2_jr;
+        else if (this.name == "thread_3") return thread_3_jr;
+        else if (this.name == "thread_4") return thread_4_jr;
+        else if (this.name == "thread_5") return thread_5_jr;
+        else if (this.name == "thread_6") return thread_6_jr;
+        else if (this.name == "thread_7") return thread_7_jr;
+        else if (this.name == "thread_8") return thread_8_jr;
+        else if (this.name == "thread_9") return thread_9_jr;
     }
 
     executeNextInstruction(){
@@ -485,7 +511,7 @@ class ThreadContext {
                     return;
                 }
 
-                getProperJumpReturnRegister().setByte(0, this.pointer);
+                this.getProperJumpReturnRegister().setByte(0, this.pointer);
                 this.pointer = indexes[args[0]];
                 this.pointer = true;
 
@@ -530,7 +556,7 @@ class ThreadContext {
                 }
 
                 if (ram.data[args[0]] === 0) {
-                    getProperJumpReturnRegister().setByte(0, this.pointer);
+                    this.getProperJumpReturnRegister().setByte(0, this.pointer);
                     this.pointer = indexes[args[0]];
                     this.pointer = true;
                     PC.log(`Jumped to instruction at instruction index ${indexes[args[0]]} because value is zero`, [this.name,'MACHINE CODE', 'SUCCESS']);
@@ -566,7 +592,7 @@ class ThreadContext {
                 }
 
                 if(ram.data[address] !== 0) {
-                    getProperJumpReturnRegister().setByte(0, this.pointer);
+                    this.getProperJumpReturnRegister().setByte(0, this.pointer);
                     this.pointer = indexes[index];
                     this.didJump = true;
                     PC.log(`Jumped to instruction at instruction index ${indexes[index]} because value is not zero`, [this.name,'MACHINE CODE', 'SUCCESS']);
@@ -578,7 +604,7 @@ class ThreadContext {
             case "halt": {
                 PC.log(`Halting execution at instruction pointer ${this.pointer}`, [this.name,'MACHINE CODE', 'INFO']);
                 this.pointer = 0;
-                main_thread.setBlockData(new Array(main_thread.size).fill(undefined));
+                ThreadContext.clearAllThreads();
                 PC.log("Instruction interpretation stopped", [this.name,'MACHINE CODE', 'SUCCESS']);
             } break;
 
@@ -588,13 +614,13 @@ class ThreadContext {
                     return;
                 }
 
-                if (getProperJumpReturnRegister().data[0] === undefined) {
+                if (this.getProperJumpReturnRegister().data[0] === undefined) {
                     PC.log(`Jump-return register is empty, ignoring`, [this.name,'MACHINE CODE', 'WARN']);
                     return;
                 }
 
-                this.pointer = getProperJumpReturnRegister().data[0];
-                getProperJumpReturnRegister().data[0] = undefined;
+                this.pointer = this.getProperJumpReturnRegister().data[0];
+                this.getProperJumpReturnRegister().data[0] = undefined;
 
                 PC.log(`Jumping to return address ${this.pointer} from jump-return register`, [this.name,'MACHINE CODE', 'FOUND', 'SUCCESS']);
             } break;
@@ -666,7 +692,7 @@ class ThreadContext {
             } break;
 
             case "thread": {
-                const threadIndexes = ["main", "a", "b", "c", "d", "e"];
+                const threadIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
                 let threadId = args[0];
                 let n = args[1];
 
@@ -707,7 +733,7 @@ class ThreadContext {
             case "nop": {} break;
 
             case "clear": {
-                main_thread.setBlockData(new Array(main_thread.size).fill(undefined));
+                this.clear()
             } break;
 
             default: {
@@ -737,7 +763,7 @@ class PC {
         logFilter: ["PROGRAM LOG", "ERROR", "WARN"],
         msPerCycle: 20, // 20,
         omitThreadPrefix: false,
-        logEmptyThreads: false,
+        logEmptyThreads: true,
     }
 
     static diagnostics = {
@@ -760,11 +786,15 @@ class PC {
             "ASSEMBLY": 'color: #C4C400; font-weight: bold;',
             "FILESYSTEM": 'color: #C4C4C4; font-weight: bold;',
             "thread_0": 'color: #F34EF3; font-weight: bold;',
-            "thread_a": 'color: #F34EF3; font-weight: bold;',
-            "thread_b": 'color: #F34EF3; font-weight: bold;',
-            "thread_c": 'color: #F34EF3; font-weight: bold;',
-            "thread_d": 'color: #F34EF3; font-weight: bold;',
-            "thread_e": 'color: #F34EF3; font-weight: bold;',
+            "thread_1": 'color: #F34EF3; font-weight: bold;',
+            "thread_2": 'color: #F34EF3; font-weight: bold;',
+            "thread_3": 'color: #F34EF3; font-weight: bold;',
+            "thread_4": 'color: #F34EF3; font-weight: bold;',
+            "thread_5": 'color: #F34EF3; font-weight: bold;',
+            "thread_6": 'color: #F34EF3; font-weight: bold;',
+            "thread_7": 'color: #F34EF3; font-weight: bold;',
+            "thread_8": 'color: #F34EF3; font-weight: bold;',
+            "thread_9": 'color: #F34EF3; font-weight: bold;',
         };
 
         let formatString = '';
@@ -856,13 +886,7 @@ class PC {
 
     static resetVolatileMemory() {
         ram.setBlockData(new Array(ram.size).fill(undefined));
-        main_thread.setBlockData(new Array(main_thread.size).fill(undefined));
-        jump_return_register.setBlockData(new Array(jump_return_register.size).fill(undefined));
-        jump_return_a.setBlockData(new Array(jump_return_a.size).fill(undefined));
-        jump_return_b.setBlockData(new Array(jump_return_b.size).fill(undefined));
-        jump_return_c.setBlockData(new Array(jump_return_c.size).fill(undefined));
-        jump_return_d.setBlockData(new Array(jump_return_d.size).fill(undefined));
-        jump_return_e.setBlockData(new Array(jump_return_e.size).fill(undefined));
+        ThreadContext.clearAllThreads();
         // delete all threads, threadPool is a set
         PC.threadPool.forEach((thread, name) => {
             thread.pointer = 0;
@@ -916,14 +940,18 @@ class PC {
         // get everything from the startup block and put it into the instruction register
         PC.log("Power on", ['MACHINE STATE']);
 
-        main_thread.setBlockData([...startup_register.data]);
+        PC.addThread("thread_0", thread_0);
+        PC.addThread("thread_1", thread_1);
+        PC.addThread("thread_2", thread_2);
+        PC.addThread("thread_3", thread_3);
+        PC.addThread("thread_4", thread_4);
+        PC.addThread("thread_5", thread_5);
+        PC.addThread("thread_6", thread_6);
+        PC.addThread("thread_7", thread_7);
+        PC.addThread("thread_8", thread_8);
+        PC.addThread("thread_9", thread_9);
 
-        PC.addThread("thread_0", main_thread);
-        PC.addThread("thread_a", thread_a);
-        PC.addThread("thread_b", thread_b);
-        PC.addThread("thread_c", thread_c);
-        PC.addThread("thread_d", thread_d);
-        PC.addThread("thread_e", thread_e);
+        thread_0.setBlockData([...startup_register.data]);
 
         PC.Clock = setInterval(() => {
             if(PC.options.logCycle) PC.log(PC.cycles, ['CYCLE']);
@@ -1026,31 +1054,39 @@ let colorBlock = new Block("colors", 0, 47); // 16*3 = 48
 let characterBlock = new Block("character_map", 48, 303); // 255
 let ram = new Block("RAM", 304, 2854);
 
-let main_thread = new Block("thread_a", 2855, 5855);
-let startup_register = new Block("startup", 5856, 6856);
-let jump_return_register = new Block("jump_return_register", 6857, 6857);
-let filesystem = new Block("filesystem", 6858, 0x7FFF); // 0xFFFF - 0x1A00 = 0xE000
+let thread_0 = new Block("thread_0", 2855, 4855);
+let thread_0_jr = new Block("thread_0_jr", 4856, 4856);
 
-let thread_a = new Block("thread_a", 0x8000, 0x8000 + 1000);
-let thread_b = new Block("thread_b", 33769, 34769);
-let thread_c = new Block("thread_c", 34770, 35770);
-let thread_d = new Block("thread_d", 35771, 36771);
-let thread_e = new Block("thread_e", 36772, 37772);
+let thread_1 = new Block("thread_1", 4857, 6857);
+let thread_1_jr = new Block("thread_1_jr", 6858, 6858);
 
-let jump_return_a = new Block("jump_return_a", 37773, 37773);
-let jump_return_b = new Block("jump_return_b", 37774, 37774);
-let jump_return_c = new Block("jump_return_c", 37775, 37775);
-let jump_return_d = new Block("jump_return_d", 37776, 37776);
-let jump_return_e = new Block("jump_return_e", 37777, 37777);
+let thread_2 = new Block("thread_2", 6859, 8859);
+let thread_2_jr = new Block("thread_2_jr", 8860, 8860);
 
-function getProperJumpReturnRegister(){
-    if (this.name == "thread_a") return jump_return_a;
-    else if (this.name == "thread_b") return jump_return_b;
-    else if (this.name == "thread_c") return jump_return_c;
-    else if (this.name == "thread_d") return jump_return_d;
-    else if (this.name == "thread_e") return jump_return_e;
-    else return jump_return_register;
-}
+let thread_3 = new Block("thread_3", 8861, 10861);
+let thread_3_jr = new Block("thread_3_jr", 10862, 10862);
+
+let thread_4 = new Block("thread_4", 10863, 12863);
+let thread_4_jr = new Block("thread_4_jr", 12864, 12864);
+
+let thread_5 = new Block("thread_5", 12865, 14865);
+let thread_5_jr = new Block("thread_5_jr", 14866, 14866);
+
+let thread_6 = new Block("thread_6", 14867, 16867);
+let thread_6_jr = new Block("thread_6_jr", 16868, 16868);
+
+let thread_7 = new Block("thread_7", 16869, 18869);
+let thread_7_jr = new Block("thread_7_jr", 18870, 18870);
+
+let thread_8 = new Block("thread_8", 18871, 20871);
+let thread_8_jr = new Block("thread_8_jr", 20872, 20872);
+
+let thread_9 = new Block("thread_9", 20873, 22873);
+let thread_9_jr = new Block("thread_9_jr", 22874, 22874);
+
+let startup_register = new Block("startup", 22875, 24875);
+
+let filesystem = new Block("filesystem", 24876, 0xFFFF);
 
 colorBlock.setBlockData([
     0x0,  0x0,  0x0,  // #000000
@@ -1072,106 +1108,107 @@ colorBlock.setBlockData([
 ]);
 
 characterBlock.setBlockData([
-    0x0, 0x20, // space , 00
-    0x0, 0x61, // a     , 01
-    0x0, 0x62, // b     , 02
-    0x0, 0x63, // c     , 03
-    0x0, 0x64, // d     , 04
-    0x0, 0x65, // e     , 05
-    0x0, 0x66, // f     , 06
-    0x0, 0x67, // g     , 07
-    0x0, 0x68, // h     , 08
-    0x0, 0x69, // i     , 09
-    0x0, 0x6A, // j     , 10
-    0x0, 0x6B, // k     , 11
-    0x0, 0x6C, // l     , 12
-    0x0, 0x6D, // m     , 13
-    0x0, 0x6E, // n     , 14
-    0x0, 0x6F, // o     , 15
-    0x0, 0x70, // p     , 16
-    0x0, 0x71, // q     , 17
-    0x0, 0x72, // r     , 18
-    0x0, 0x73, // s     , 19
-    0x0, 0x74, // t     , 20
-    0x0, 0x75, // u     , 21
-    0x0, 0x76, // v     , 22
-    0x0, 0x77, // w     , 23
-    0x0, 0x78, // x     , 24
-    0x0, 0x79, // y     , 25
-    0x0, 0x7A, // z     , 26
-    0x0, 0x41, // A     , 27
-    0x0, 0x42, // B     , 28
-    0x0, 0x43, // C     , 29
-    0x0, 0x44, // D     , 30
-    0x0, 0x45, // E     , 31
-    0x0, 0x46, // F     , 32
-    0x0, 0x47, // G     , 33
-    0x0, 0x48, // H     , 34
-    0x0, 0x49, // I     , 35
-    0x0, 0x4A, // J     , 36
-    0x0, 0x4B, // K     , 37
-    0x0, 0x4C, // L     , 38
-    0x0, 0x4D, // M     , 39
-    0x0, 0x4E, // N     , 40
-    0x0, 0x4F, // O     , 41
-    0x0, 0x50, // P     , 42
-    0x0, 0x51, // Q     , 43
-    0x0, 0x52, // R     , 44
-    0x0, 0x53, // S     , 45
-    0x0, 0x54, // T     , 46
-    0x0, 0x55, // U     , 47
-    0x0, 0x56, // V     , 48
-    0x0, 0x57, // W     , 49
-    0x0, 0x58, // X     , 50
-    0x0, 0x59, // Y     , 51
-    0x0, 0x5A, // Z     , 52
-    0x0, 0x30, // 0     , 53
-    0x0, 0x31, // 1     , 54
-    0x0, 0x32, // 2     , 55
-    0x0, 0x33, // 3     , 56
-    0x0, 0x34, // 4     , 57
-    0x0, 0x35, // 5     , 58
-    0x0, 0x36, // 6     , 59
-    0x0, 0x37, // 7     , 60
-    0x0, 0x38, // 8     , 61
-    0x0, 0x39, // 9     , 62
-    0x0, 0x21, // !     , 63
-    0x0, 0x3F, // ?     , 64
-    0x0, 0x2C, // ,     , 65
-    0x0, 0x2E, // .     , 66
-    0x0, 0x3A, // :     , 67
-    0x0, 0x3B, // ;     , 68
-    0x0, 0x27, // '     , 69
-    0x0, 0x22, // "     , 70
-    0x0, 0x2D, // -     , 71
-    0x0, 0x2B, // +     , 72
-    0x0, 0x2F, // /     , 73
-    0x0, 0x2A, // *     , 74
-    0x0, 0x5F, // _     , 75
-    0x0, 0x3D, // =     , 76
-    0x0, 0x28, // (     , 77
-    0x0, 0x29, // )     , 78
-    0x0, 0x5B, // [     , 79
-    0x0, 0x5D, // ]     , 80
-    0x0, 0x7B, // {     , 81
-    0x0, 0x7D, // }     , 82
-    0x0, 0x3C, // <     , 83
-    0x0, 0x3E, // >     , 84
-    0x0, 0x5C, // \     , 85
-    0x0, 0x7E, // ~     , 86
-    0x0, 0x40, // @     , 87
-    0x0, 0x23, // #     , 88
-    0x0, 0x24, // $     , 89
-    0x0, 0x25, // %     , 90
-    0x0, 0x5E, // ^     , 91
-    0x0, 0x26, // &     , 92
-    0x24, 0x00, // ␀     , 93 : null
-    0x24, 0x02, // ␂     , 94 : start of text
-    0x24, 0x03, // ␃     , 95 : end of text
-    0x24, 0x04, // ␄     , 96 : end of transmission
-    0x24, 0x1C, // ␜     , 97 : file separator
-    0x24, 0x1F, // ␟     , 98 : unit separator
-    0x00, 0x0A  // \n     , 99 : line feed
+    0x0, 0x20,  // space , 00
+    0x0, 0x61,  // a     , 01
+    0x0, 0x62,  // b     , 02
+    0x0, 0x63,  // c     , 03
+    0x0, 0x64,  // d     , 04
+    0x0, 0x65,  // e     , 05
+    0x0, 0x66,  // f     , 06
+    0x0, 0x67,  // g     , 07
+    0x0, 0x68,  // h     , 08
+    0x0, 0x69,  // i     , 09
+    0x0, 0x6A,  // j     , 10
+    0x0, 0x6B,  // k     , 11
+    0x0, 0x6C,  // l     , 12
+    0x0, 0x6D,  // m     , 13
+    0x0, 0x6E,  // n     , 14
+    0x0, 0x6F,  // o     , 15
+    0x0, 0x70,  // p     , 16
+    0x0, 0x71,  // q     , 17
+    0x0, 0x72,  // r     , 18
+    0x0, 0x73,  // s     , 19
+    0x0, 0x74,  // t     , 20
+    0x0, 0x75,  // u     , 21
+    0x0, 0x76,  // v     , 22
+    0x0, 0x77,  // w     , 23
+    0x0, 0x78,  // x     , 24
+    0x0, 0x79,  // y     , 25
+    0x0, 0x7A,  // z     , 26
+    0x0, 0x41,  // A     , 27
+    0x0, 0x42,  // B     , 28
+    0x0, 0x43,  // C     , 29
+    0x0, 0x44,  // D     , 30
+    0x0, 0x45,  // E     , 31
+    0x0, 0x46,  // F     , 32
+    0x0, 0x47,  // G     , 33
+    0x0, 0x48,  // H     , 34
+    0x0, 0x49,  // I     , 35
+    0x0, 0x4A,  // J     , 36
+    0x0, 0x4B,  // K     , 37
+    0x0, 0x4C,  // L     , 38
+    0x0, 0x4D,  // M     , 39
+    0x0, 0x4E,  // N     , 40
+    0x0, 0x4F,  // O     , 41
+    0x0, 0x50,  // P     , 42
+    0x0, 0x51,  // Q     , 43
+    0x0, 0x52,  // R     , 44
+    0x0, 0x53,  // S     , 45
+    0x0, 0x54,  // T     , 46
+    0x0, 0x55,  // U     , 47
+    0x0, 0x56,  // V     , 48
+    0x0, 0x57,  // W     , 49
+    0x0, 0x58,  // X     , 50
+    0x0, 0x59,  // Y     , 51
+    0x0, 0x5A,  // Z     , 52
+    0x0, 0x30,  // 0     , 53
+    0x0, 0x31,  // 1     , 54
+    0x0, 0x32,  // 2     , 55
+    0x0, 0x33,  // 3     , 56
+    0x0, 0x34,  // 4     , 57
+    0x0, 0x35,  // 5     , 58
+    0x0, 0x36,  // 6     , 59
+    0x0, 0x37,  // 7     , 60
+    0x0, 0x38,  // 8     , 61
+    0x0, 0x39,  // 9     , 62
+    0x0, 0x21,  // !     , 63
+    0x0, 0x3F,  // ?     , 64
+    0x0, 0x2C,  // ,     , 65
+    0x0, 0x2E,  // .     , 66
+    0x0, 0x3A,  // :     , 67
+    0x0, 0x3B,  // ;     , 68
+    0x0, 0x27,  // '     , 69
+    0x0, 0x22,  // "     , 70
+    0x0, 0x2D,  // -     , 71
+    0x0, 0x2B,  // +     , 72
+    0x0, 0x2F,  // /     , 73
+    0x0, 0x2A,  // *     , 74
+    0x0, 0x5F,  // _     , 75
+    0x0, 0x3D,  // =     , 76
+    0x0, 0x28,  // (     , 77
+    0x0, 0x29,  // )     , 78
+    0x0, 0x5B,  // [     , 79
+    0x0, 0x5D,  // ]     , 80
+    0x0, 0x7B,  // {     , 81
+    0x0, 0x7D,  // }     , 82
+    0x0, 0x3C,  // <     , 83
+    0x0, 0x3E,  // >     , 84
+    0x0, 0x5C,  // \     , 85
+    0x0, 0x7E,  // ~     , 86
+    0x0, 0x40,  // @     , 87
+    0x0, 0x23,  // #     , 88
+    0x0, 0x24,  // $     , 89
+    0x0, 0x25,  // %     , 90
+    0x0, 0x5E,  // ^     , 91
+    0x0, 0x26,  // &     , 92
+    0x24, 0x00, // ␀    , 93  : null
+    0x24, 0x02, // ␂    , 94  : start of text
+    0x24, 0x03, // ␃    , 95  : end of text
+    0x24, 0x04, // ␄    , 96  : end of transmission
+    0x24, 0x1C, // ␜    , 97  : file separator
+    0x24, 0x1F, // ␟    , 98  : unit separator
+    0x00, 0x0A, // \n    , 99  : line feed
+    0x00, 0xA4  // ¤     , 100 : unknown character
 ]);
 
 const characterBlockVisualized = () => characterBlock.visualize((data) => {
@@ -1191,74 +1228,36 @@ const getFileSystem = () => filesystem.visualize((data) => {
 })
 
 const charactersToCode = (str) => {
-    let error = false;
     let arr = [];
-    str.split("").forEach(char => {
-        if (!characterBlockVisualized().includes(char)) {
-            PC.halt(`Character '${char}' is not defined in the character block`, ['MACHINE CODE']);
-            error = true;
-            return;
+    str.split('').forEach(char => {
+        let code = characterBlockVisualized().indexOf(char)
+
+        if(code == -1){
+            // if the character is not found, use the last character in the block
+            code = characterBlockVisualized().length - 1;
         }
-        arr.push(characterBlockVisualized().indexOf(char));
+
+        arr.push(code);
     })
+
     return arr;
 }
 
 const codeToCharacters = (arr) => {
-    return arr.map(index => characterBlockVisualized()[index]).join("");
+    let str = "";
+    arr.forEach(code => {
+        let char = characterBlockVisualized()[code];
+        if(char == undefined){
+            // if the character is not found, use the last character in the block
+            char = characterBlockVisualized()[characterBlockVisualized().length - 1];
+        }
+        str += char;
+    })
+
+    return str;
 }
 
 startup_register.setBlockData([
-    4, OPCODE.store, 0, 0, // y
-    4, OPCODE.store, 1, 1, // 1
-    4, OPCODE.store, 2, 20, // x1
-    4, OPCODE.store, 3, 20, // x2
-    4, OPCODE.store, 4, 20, // x3
-    4, OPCODE.store, 5, 20, // x4
+// Store values in registers
 
-    4, OPCODE.store, 20, 20,
-    4, OPCODE.store, 40, 40,
-    4, OPCODE.store, 60, 60,
-
-    4, OPCODE.store, 7, 1, // back color
-    4, OPCODE.store, 8, 15, // fore color
-    4, OPCODE.store, 9, 0, // character
-
-    4, OPCODE.thread, 1, 3, // start thread with 5 instructions
-    5, OPCODE.subtract, 2, 1, 2,
-    7, OPCODE.set_pixel, 2, 0, 7, 8, 9, // set pixel at (x, y) with back color, fore color and character
-    4, OPCODE.jump_if_not_zero, 2, 0,
-
-    4, OPCODE.thread, 2, 5, // start thread with 5 instructions
-    5, OPCODE.subtract, 3, 1, 3,
-    5, OPCODE.add, 3, 20, 3,
-    7, OPCODE.set_pixel, 3, 0, 7, 8, 9, // set pixel at (x, y) with back color, fore color and character
-    5, OPCODE.subtract, 3, 20, 3,
-    4, OPCODE.jump_if_not_zero, 3, 0,
-
-    4, OPCODE.thread, 3, 5, // start thread with 5 instructions
-    5, OPCODE.subtract, 4, 1, 4,
-    5, OPCODE.add, 4, 40, 4,
-    7, OPCODE.set_pixel, 4, 0, 7, 8, 9, // set pixel at (x, y) with back color, fore color and character
-    5, OPCODE.subtract, 4, 40, 4,
-    4, OPCODE.jump_if_not_zero, 4, 0,
-
-    4, OPCODE.thread, 4, 5, // start thread with 5 instructions
-    5, OPCODE.subtract, 5, 1, 5,
-    5, OPCODE.add, 5, 60, 5,
-    7, OPCODE.set_pixel, 5, 0, 7, 8, 9, // set pixel at (x, y) with back color, fore color and character
-    5, OPCODE.subtract, 5, 60, 5,
-    4, OPCODE.jump_if_not_zero, 5, 0,
-
-
-    // 4, OPCODE.store, 0, 20, // x
-    // 4, OPCODE.store, 1, 1, // 1
-    // 4, OPCODE.store, 2, 0, // y
-    // 4, OPCODE.store, 3, 1, // back color
-    // 4, OPCODE.store, 4, 15, // fore color
-    // 4, OPCODE.store, 5, 0, // character
-    // 4, OPCODE.thread, 1, 3,
-    // 5, OPCODE.subtract, 0, 1, 0,
-    // 7, OPCODE.set_pixel, 0, 2, 3, 4, 5, // set pixel at (x, y) with back color, fore color and character
-    // 4, OPCODE.jump_if_not_zero, 0, 0,
 ]);
