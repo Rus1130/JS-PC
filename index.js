@@ -933,7 +933,8 @@ class PC {
 
         const typeMap = {
             "txt": 0, // text
-            "a": 1, // assembly
+            "raw": 1, // bytecode
+            "pasm": 2, // readable bytecode
         }
 
         let fileType = typeMap[type] ?? 0;
