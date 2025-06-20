@@ -20,6 +20,13 @@ class Block {
         });
     }
 
+    padEndArray(arr, length, value) {
+        while (arr.length < length) {
+            arr.push(value);
+        }
+        return arr;
+    }
+
     setBlockData(data){
         // 1. turn data into a string of 3-digit numbers
         // 2. pad it to 768 characters with zeros, to make sure its 256 bytes
@@ -29,6 +36,7 @@ class Block {
             PC.halt(`Data length exceeds ${0xffff} bytes for block ${this.name}: ${data.length}`);
             return;
         }
+
         this.data = data;
 
         this.data.forEach((byte, index) => {
@@ -125,7 +133,7 @@ class ThreadContext {
     }
 
     static clearAllThreads() {
-        for (let thread of Object.values(PC.threads)) {
+        for (let thread of Object.values(PC.threadPool)) {
             thread.pointer = 0;
             thread.active = true;
             thread.didJump = false;
@@ -265,7 +273,7 @@ class ThreadContext {
                         char = characterBlockVisualized()[0];
                     }
 
-                    PC.log(`Character: '${char}'`, ['MACHINE CODE', 'PROGRAM LOG']);
+                    PC.log(`Character: '${char}'`, [this.name,'MACHINE CODE', 'PROGRAM LOG']);
                     PC.log(`Printed character from RAM at address ${value}: ${char}`, [this.name,'MACHINE CODE', 'SUCCESS']);
                 } else {
                     let str = '';
@@ -750,6 +758,8 @@ class PC {
     static Clock = null;
     static instructionPointer = 0;
     static threadPool = new Map();
+    static on = false;
+    static inputListener;
 
     static halt(message, prefixes = []){
         PC.log(message, prefixes.concat(['ERROR']));
@@ -763,7 +773,7 @@ class PC {
         logFilter: ["PROGRAM LOG", "ERROR", "WARN"],
         msPerCycle: 20, // 20,
         omitThreadPrefix: false,
-        logEmptyThreads: true,
+        logEmptyThreads: false,
     }
 
     static diagnostics = {
@@ -795,6 +805,7 @@ class PC {
             "thread_7": 'color: #F34EF3; font-weight: bold;',
             "thread_8": 'color: #F34EF3; font-weight: bold;',
             "thread_9": 'color: #F34EF3; font-weight: bold;',
+            "interrupt": 'color: #000000; font-weight: bold;',
         };
 
         let formatString = '';
@@ -824,9 +835,6 @@ class PC {
         } else {
             out();
         }
-
-        
-    
     }
 
     static clearScreen() {
@@ -857,6 +865,7 @@ class PC {
     static didJump = false;
 
     static compileToMachineCode(assemblyString){
+        if(PC.on == false) return;
         let lines = assemblyString.trim().split(/\n/).map(line => line.trim()).filter(line => line.length > 0);
 
         PC.log(`Compiling assembly code to machine code`, ['ASSEMBLY']);
@@ -895,7 +904,7 @@ class PC {
             thread.register.setBlockData(new Array(thread.register.size).fill(undefined));
         });
 
-        filesystem.setBlockData(new Array(filesystem.size).fill(undefined));
+        // filesystem.setBlockData(new Array(filesystem.size).fill(undefined));
         PC.threadPool = new Map();
         PC.cycles = 0;
         clearInterval(PC.Clock);
@@ -938,6 +947,7 @@ class PC {
 
     static powerOn(){
         // get everything from the startup block and put it into the instruction register
+        PC.on = true;
         PC.log("Power on", ['MACHINE STATE']);
 
         PC.addThread("thread_0", thread_0);
@@ -950,8 +960,28 @@ class PC {
         PC.addThread("thread_7", thread_7);
         PC.addThread("thread_8", thread_8);
         PC.addThread("thread_9", thread_9);
+        PC.addThread("interrupt", interrupt_thread);
 
         thread_0.setBlockData([...startup_register.data]);
+
+        PC.inputListener = (event) => {
+            event.preventDefault();
+            let key = event.key;
+            if(key == "Enter") key = "\n";
+
+            if(key.length != 1) key = "¤"
+
+            let keyCode = charactersToCode(key)[0];
+
+            let machineCode = [
+                4, OPCODE.store, 2550, keyCode,
+                3, OPCODE.print_c, 2550,
+            ]
+
+            interrupt_thread.pushBlockData(machineCode);
+        };
+
+        document.body.addEventListener('keyup', PC.inputListener);
 
         PC.Clock = setInterval(() => {
             if(PC.options.logCycle) PC.log(PC.cycles, ['CYCLE']);
@@ -984,7 +1014,9 @@ class PC {
     }
 
     static powerOff(){
+        PC.on = false;
         PC.resetVolatileMemory();
+        document.body.removeEventListener("keyup", PC.inputListener);
         setTimeout(() => {
             PC.log("Power off", ['MACHINE STATE']);
         }, 10)
@@ -1086,7 +1118,12 @@ let thread_9_jr = new Block("thread_9_jr", 22874, 22874);
 
 let startup_register = new Block("startup", 22875, 24875);
 
-let filesystem = new Block("filesystem", 24876, 0xFFFF);
+let inputBuffer = new Block("input_buffer", 24876, 24876+255);
+let interrupt_thread = new Block("interrupt_thread", 25132, 25132+50);
+
+// shits fucked bc threads dont autoclear inputs. make that happen
+
+// let filesystem = new Block("filesystem", 0x612C, 0xFFFF);
 
 colorBlock.setBlockData([
     0x0,  0x0,  0x0,  // #000000
@@ -1212,17 +1249,17 @@ characterBlock.setBlockData([
 ]);
 
 const characterBlockVisualized = () => characterBlock.visualize((data) => {
-    return data.map(v => v.toString(16).padStart(2, '0').toUpperCase()).join("").match(/.{1,4}/g).map(v => {
+    return data.filter(v => v !== undefined).map(v => v.toString(16).padStart(2, '0').toUpperCase()).join("").match(/.{1,4}/g).map(v => {
         return String.fromCharCode(parseInt(v, 16))
     });
 })
 
 const colorBlockVisualized = () => colorBlock.visualize((data) => {
-    return data.map(v => v.toString(16).toUpperCase().padStart(2, '0')).join("").match(/.{1,6}/g).map(v => "#"+v);
+    return data.filter(v => v !== undefined).map(v => v.toString(16).toUpperCase().padStart(2, '0')).join("").match(/.{1,6}/g).map(v => "#"+v);
 })
 
 const getFileSystem = () => filesystem.visualize((data) => {
-    return data.map(v => v.toString(16).padStart(2, '0').toUpperCase()).join("").match(/.{1,4}/g).map(v => {
+    return data.filter(v => v !== undefined).map(v => v.toString(16).padStart(2, '0').toUpperCase()).join("").match(/.{1,4}/g).map(v => {
         return String.fromCharCode(parseInt(v, 16))
     }).join("");
 })
